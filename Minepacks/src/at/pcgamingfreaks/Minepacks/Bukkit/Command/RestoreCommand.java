@@ -36,6 +36,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Level;
 
 public class RestoreCommand extends MinepacksCommand
 {
@@ -59,7 +60,19 @@ public class RestoreCommand extends MinepacksCommand
 		listCommands = plugin.getLanguage().getCommandAliases("ListBackups", "list");
 		//noinspection ConstantConditions
 		elementsPerPage = plugin.getLanguage().getYaml().getInt("Ingame.Restore.BackupsPerPage", 10);
-		dateFormat = (plugin.getLanguage().get("Ingame.Restore.BackupEntry").contains("{BackupDate}")) ? new SimpleDateFormat(plugin.getLanguage().get("Ingame.Restore.DateFormat")) : null;
+
+		SimpleDateFormat sdf = null;
+		if (plugin.getLanguage().get("Ingame.Restore.BackupEntry").contains("{BackupDate}"))
+		{
+			String formatString = plugin.getLanguage().get("Ingame.Restore.DateFormat");
+			try {
+				sdf = new SimpleDateFormat(formatString);
+			} catch(IllegalArgumentException e) {
+				plugin.getLogger().log(Level.SEVERE, "Failed to create date formatter from format string: " + formatString, e);
+				sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"); // Fallback
+			}
+		}
+		dateFormat = sdf;
 	}
 
 	@Override
