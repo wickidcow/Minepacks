@@ -269,10 +269,11 @@ public abstract class SQL extends Database
 	@Override
 	protected void loadBackpack(final OfflinePlayer player, final Callback<Backpack> callback)
 	{
+		final String playerUUID = getPlayerFormattedUUID(player);
+		final String playerName = player.getName();
 		Minepacks.getScheduler().runAsync(task -> {
 			try(Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(queryGetBP))
 			{
-				final String playerUUID = getPlayerFormattedUUID(player);
 				ps.setString(1, playerUUID);
 				final int bpID, version;
 				final byte[] data;
@@ -295,7 +296,7 @@ public abstract class SQL extends Database
 				final ItemStack[] itemStacks = itsSerializer.deserialize(data, version);
 				if (data != null && data.length != 0 && itemStacks == null)
 				{
-					writeBackup(player.getName(), playerUUID, version, data);
+					writeBackup(playerName, playerUUID, version, data);
 				}
 				// SQL and item deserialization stay off-thread. Bukkit inventory creation must happen
 				// back on the server thread on Paper.
@@ -334,10 +335,11 @@ public abstract class SQL extends Database
 	@Override
 	public void getCooldown(final Player player, final Callback<Long> callback)
 	{
+		final String playerUUID = getPlayerFormattedUUID(player);
 		Minepacks.getScheduler().runAsync(asyncTask -> {
 			try(Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(queryGetCooldown))
 			{
-				ps.setString(1, getPlayerFormattedUUID(player));
+				ps.setString(1, playerUUID);
 				try(ResultSet rs = ps.executeQuery())
 				{
 					final long time = (rs.next()) ? rs.getTimestamp(fieldCdTime).getTime() : 0;
