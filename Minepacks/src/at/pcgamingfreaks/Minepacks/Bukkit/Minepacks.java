@@ -123,17 +123,17 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		lang = new Language(this);
 		load();
 
+		if(ServerType.isPaperCompatible())
+		{
+			getLogger().info("Paper compatibility enabled using the stable Bukkit plugin loading path.");
+		}
 		getLogger().info(StringUtils.getPluginEnabledMessage(getDescription().getName()));
 	}
 
 	private boolean checkMcVersion()
 	{
-		if (MCVersion.isNewerThan(MCVersion.MC_NMS_1_20_R3) && ServerType.isPaperCompatible())
-		{
-			getLogger().warning("Paper support is experimental! Use at your own risk!");
-			getLogger().warning("No guarantee for data integrity! Backup constantly!");
-		}
-		// DO NOT REMOVE THIS! This is protecting your data! To add support for a new version, update PCGF PluginLib and then update the last version check!
+		// Keep the upper version guard: item serialization is data-sensitive and must be explicitly
+		// validated for new Minecraft versions before allowing existing backpack data to be rewritten.
 		if (MCVersion.is(MCVersion.UNKNOWN) || !MCVersion.isUUIDsSupportAvailable() || MCVersion.isNewerThan(MCVersion.MC_NMS_26_2_R1))
 		{
 			this.warnOnVersionIncompatibility();
@@ -332,7 +332,8 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		{
 			opener.playSound(opener.getLocation(), openSound, 1, 0);
 		}
-		backpack.open(opener, editable);
+		if(title == null) backpack.open(opener, editable);
+		else backpack.open(opener, editable, title);
 	}
 
 	@Override
