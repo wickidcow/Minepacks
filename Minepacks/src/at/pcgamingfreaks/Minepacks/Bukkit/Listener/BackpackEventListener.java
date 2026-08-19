@@ -28,6 +28,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 public class BackpackEventListener extends MinepacksListener
@@ -107,6 +108,19 @@ public class BackpackEventListener extends MinepacksListener
 				backpack.setChanged();
 				break;
 			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+	public void onMove(InventoryMoveItemEvent event)
+	{
+		if(event.getSource().getHolder() instanceof Backpack)
+		{
+			((Backpack) event.getSource().getHolder()).setChanged();
+		}
+		if(event.getDestination().getHolder() instanceof Backpack)
+		{
+			((Backpack) event.getDestination().getHolder()).setChanged();
 		}
 	}
 	
