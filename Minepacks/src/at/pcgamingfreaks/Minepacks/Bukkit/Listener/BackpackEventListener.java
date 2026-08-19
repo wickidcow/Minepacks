@@ -21,13 +21,13 @@ import at.pcgamingfreaks.Bukkit.Message.Message;
 import at.pcgamingfreaks.Minepacks.Bukkit.Backpack;
 import at.pcgamingfreaks.Minepacks.Bukkit.Minepacks;
 import at.pcgamingfreaks.Minepacks.Bukkit.Placeholders;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 public class BackpackEventListener extends MinepacksListener
@@ -80,9 +80,32 @@ public class BackpackEventListener extends MinepacksListener
 			{
 				event.setCancelled(true);
 			}
-		    else
+			else
 			{
 				backpack.setChanged();
+			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+	public void onDrag(InventoryDragEvent event)
+	{
+		if(!(event.getInventory().getHolder() instanceof Backpack) || !(event.getWhoClicked() instanceof Player)) return;
+		Backpack backpack = (Backpack) event.getInventory().getHolder();
+		Player player = (Player) event.getWhoClicked();
+		if(!backpack.canEdit(player))
+		{
+			event.setCancelled(true);
+			return;
+		}
+
+		final int backpackSize = event.getInventory().getSize();
+		for(int rawSlot : event.getRawSlots())
+		{
+			if(rawSlot < backpackSize)
+			{
+				backpack.setChanged();
+				break;
 			}
 		}
 	}
