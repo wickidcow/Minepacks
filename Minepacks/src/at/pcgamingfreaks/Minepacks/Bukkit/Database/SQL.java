@@ -31,11 +31,16 @@ import org.intellij.lang.annotations.Language;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.*;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
 public abstract class SQL extends Database
 {
 	private final ConnectionProvider dataSource;
+	private final ConcurrentHashMap<UUID, Object> backpackSaveLocks = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<UUID, AtomicLong> backpackSaveGenerations = new ConcurrentHashMap<>();
 
 	protected String tablePlayers, tableBackpacks, tableCooldowns; // Table Names
 	protected String fieldPlayerName, fieldPlayerID, fieldPlayerUUID, fieldBpOwner, fieldBpIts, fieldBpVersion, fieldBpLastUpdate, fieldCdPlayer, fieldCdTime; // Table Fields
@@ -128,7 +133,7 @@ public abstract class SQL extends Database
 
 	protected final void buildQueries()
 	{
-		// Build the SQL queries with placeholders for the table and field names
+		// Build the DB queries with placeholders for the table and field names
 		queryGetBP = "SELECT {FieldBPOwner},{FieldBPITS},{FieldBPVersion} FROM {TableBackpacks} INNER JOIN {TablePlayers} ON {TableBackpacks}.{FieldBPOwner}={TablePlayers}.{FieldPlayerID} WHERE {FieldUUID}=?;";
 		querySyncCooldown = "INSERT INTO {TableCooldowns} ({FieldCDPlayer},{FieldCDTime}) SELECT {FieldPlayerID},? FROM {TablePlayers} WHERE {FieldUUID}=? ON DUPLICATE KEY UPDATE {FieldCDTime}=?;";
 		queryUpdatePlayerAdd = "INSERT INTO {TablePlayers} ({FieldName},{FieldUUID}) VALUES (?,?) ON DUPLICATE KEY UPDATE {FieldName}=?;";
@@ -146,7 +151,7 @@ public abstract class SQL extends Database
 
 	protected void setTableAndFieldNames()
 	{
-		// Replace the table and filed names with the names from the config
+		// Replace the table and field names with the names from the config
 		queryUpdatePlayerAdd        = replacePlaceholders(queryUpdatePlayerAdd);
 		queryGetPlayerID            = replacePlaceholders(queryGetPlayerID);
 		queryGetBP                  = replacePlaceholders(queryGetBP);
@@ -202,41 +207,51 @@ public abstract class SQL extends Database
 	{
 		final byte[] data = itsSerializer.serialize(backpack.getInventory());
 		final int id = backpack.getOwnerDatabaseId(), usedSerializer = itsSerializer.getUsedSerializer();
-		final String nameOrUUID = getPlayerFormattedUUID(backpack.getOwnerId()), name = backpack.getOwner().getName();
+		final UUID ownerId = backpack.getOwnerId();
+		final String nameOrUUID = getPlayerFormattedUUID(ownerId), name = backpack.getOwner().getName();
+		final Object saveLock = backpackSaveLocks.computeIfAbsent(ownerId, ignored -> new Object());
+		final AtomicLong generation = backpackSaveGenerations.computeIfAbsent(ownerId, ignored -> new AtomicLong());
+		final long saveGeneration = generation.incrementAndGet();
 
 		Runnable runnable = () -> {
-			try(Connection connection = getConnection())
+			synchronized(saveLock)
 			{
-				if(id <= 0)
+				// Async scheduler workers are not guaranteed to complete in submission order. If a
+				// newer snapshot has already been queued, never let this older snapshot overwrite it.
+				if(saveGeneration != generation.get()) return;
+				try(Connection connection = getConnection())
 				{
-					try(PreparedStatement ps = connection.prepareStatement(queryGetPlayerID))
+					if(id <= 0)
 					{
-						ps.setString(1, nameOrUUID);
-						try(ResultSet rs = ps.executeQuery())
+						try(PreparedStatement ps = connection.prepareStatement(queryGetPlayerID))
 						{
-							if(rs.next())
+							ps.setString(1, nameOrUUID);
+							try(ResultSet rs = ps.executeQuery())
 							{
-								final int newID = rs.getInt(fieldPlayerID);
-								DBTools.runStatement(connection, queryInsertBp, newID, data, usedSerializer);
-								Minepacks.getScheduler().runNextTick(task -> backpack.setOwnerDatabaseId(newID));
-							}
-							else
-							{
-								plugin.getLogger().warning("Failed saving backpack for: " + name + " (Unable to get players ID from database)");
-								writeBackup(name, nameOrUUID, usedSerializer, data);
+								if(rs.next())
+								{
+									final int newID = rs.getInt(fieldPlayerID);
+									DBTools.runStatement(connection, queryInsertBp, newID, data, usedSerializer);
+									Minepacks.getScheduler().runNextTick(task -> backpack.setOwnerDatabaseId(newID));
+								}
+								else
+								{
+									plugin.getLogger().warning("Failed saving backpack for: " + name + " (Unable to get players ID from database)");
+									writeBackup(name, nameOrUUID, usedSerializer, data);
+								}
 							}
 						}
 					}
+					else
+					{
+						DBTools.runStatement(connection, queryUpdateBp, data, usedSerializer, id);
+					}
 				}
-				else
+				catch(SQLException e)
 				{
-					DBTools.runStatement(connection, queryUpdateBp, data, usedSerializer, id);
+					plugin.getLogger().log(Level.SEVERE, "Failed to save backpack in database! Error: {0}", e.getMessage());
+					writeBackup(name, nameOrUUID, usedSerializer, data);
 				}
-			}
-			catch(SQLException e)
-			{
-				plugin.getLogger().log(Level.SEVERE, "Failed to save backpack in database! Error: {0}", e.getMessage());
-				writeBackup(name, nameOrUUID, usedSerializer, data);
 			}
 		};
 		if(asyncSave) Minepacks.getScheduler().runAsync(task -> runnable.run()); else runnable.run();
