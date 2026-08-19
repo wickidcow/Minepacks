@@ -1,5 +1,4 @@
-# This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+# This workflow builds the normal compatibility matrix and validates the final release package.
 
 name: Build
 
@@ -19,5 +18,20 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
-      - name: Build and test with maven
+      - name: Build and test with Maven
         run: mvn -B -s .github/workflows/settings.xml clean package --file pom.xml
+
+  releasePackage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build standalone dependency
+        run: mvn -B -s .github/workflows/settings.xml clean install -P Standalone --file pom.xml
+      - name: Build release package
+        run: mvn -B -s .github/workflows/settings.xml clean package -P Release --file pom.xml
