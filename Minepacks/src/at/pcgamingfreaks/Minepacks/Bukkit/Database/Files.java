@@ -129,14 +129,17 @@ public class Files extends Database
 	@Override
 	public void saveBackpack(Backpack backpack)
 	{
+		final int usedSerializer = itsSerializer.getUsedSerializer();
+		final byte[] data = itsSerializer.serialize(backpack.getInventory());
+		final String ownerUUID = getPlayerFormattedUUID(backpack.getOwnerId());
 		File save = new File(saveFolder, getFileName(backpack.getOwnerId()));
 		File temp = new File(saveFolder, save.getName() + ".tmp");
 		try
 		{
 			try(FileOutputStream fos = new FileOutputStream(temp))
 			{
-				fos.write(itsSerializer.getUsedSerializer());
-				fos.write(itsSerializer.serialize(backpack.getInventory()));
+				fos.write(usedSerializer);
+				fos.write(data);
 				fos.flush();
 				fos.getFD().sync();
 			}
@@ -152,7 +155,9 @@ public class Files extends Database
 		}
 		catch(Exception e)
 		{
-			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack.", e);
+			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack. Preserving a recovery backup and marking it dirty for retry.", e);
+			writeBackup(backpack.getOwner().getName(), ownerUUID, usedSerializer, data);
+			Minepacks.getScheduler().runNextTick(task -> backpack.setChanged());
 			if(temp.exists() && !temp.delete())
 			{
 				plugin.getLogger().warning("Failed to remove temporary backpack file (" + temp.getAbsolutePath() + ").");
