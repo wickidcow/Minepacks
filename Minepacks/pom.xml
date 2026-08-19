@@ -232,11 +232,6 @@
 					<artifactId>Minepacks-BadRabbit-Bukkit</artifactId>
 					<version>${project.version}</version>
 				</dependency>
-				<dependency>
-					<groupId>at.pcgamingfreaks</groupId>
-					<artifactId>Minepacks-Bootstrap-Paper</artifactId>
-					<version>${project.version}</version>
-				</dependency>
 			</dependencies>
 			<build>
 				<plugins>
@@ -259,7 +254,6 @@
 										<includes>
 											<include>at.pcgamingfreaks:Minepacks-API</include>
 											<include>at.pcgamingfreaks:Minepacks-MagicValues</include>
-											<include>at.pcgamingfreaks:Minepacks-Bootstrap-Paper</include>
 											<include>at.pcgamingfreaks:BadRabbit-Bukkit</include>
 											<include>at.pcgamingfreaks:Minepacks-BadRabbit-Bukkit</include>
 											<include>at.pcgamingfreaks:Minepacks</include>
