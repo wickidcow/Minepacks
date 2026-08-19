@@ -227,7 +227,7 @@ public class DisableShulkerboxes extends MinepacksListener
 	@EventHandler(ignoreCancelled = true)
 	public void onBlockDispense(BlockDispenseEvent event)
 	{
-		if(SHULKER_BOX_MATERIALS.contains(event.getBlock().getType()))
+		if(SHULKER_BOX_MATERIALS.contains(event.getItem().getType()))
 		{
 			event.setCancelled(true);
 		}
