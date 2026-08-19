@@ -223,6 +223,9 @@ public abstract class SQL extends Database
 				{
 					if(id <= 0)
 					{
+						// Player creation is normally queued on join, but a very fast first save can race
+						// that async insert. Upsert here too so the first backpack snapshot is never lost.
+						DBTools.runStatement(connection, queryUpdatePlayerAdd, name, nameOrUUID, name);
 						try(PreparedStatement ps = connection.prepareStatement(queryGetPlayerID))
 						{
 							ps.setString(1, nameOrUUID);
@@ -232,7 +235,8 @@ public abstract class SQL extends Database
 								{
 									final int newID = rs.getInt(fieldPlayerID);
 									DBTools.runStatement(connection, queryInsertBp, newID, data, usedSerializer);
-									Minepacks.getScheduler().runNextTick(task -> backpack.setOwnerDatabaseId(newID));
+									if(asyncSave) Minepacks.getScheduler().runNextTick(task -> backpack.setOwnerDatabaseId(newID));
+									else backpack.setOwnerDatabaseId(newID);
 								}
 								else
 								{
@@ -283,26 +287,33 @@ public abstract class SQL extends Database
 					}
 				}
 
-				ItemStack[] its = itsSerializer.deserialize(data, version);
-				if (data != null && data.length != 0 && its == null)
+				final ItemStack[] itemStacks = itsSerializer.deserialize(data, version);
+				if (data != null && data.length != 0 && itemStacks == null)
 				{
 					writeBackup(player.getName(), playerUUID, version, data);
 				}
-				final Backpack backpack = (its != null) ? new Backpack(player, its, bpID) : null;
+				// SQL and item deserialization stay off-thread. Bukkit inventory creation must happen
+				// back on the server thread on Paper.
 				Minepacks.getScheduler().runNextTick(task1 -> {
-					if(backpack != null)
+					if(itemStacks == null)
 					{
-						callback.onResult(backpack);
+						callback.onFail();
+						return;
 					}
-					else
+					try
 					{
+						callback.onResult(new Backpack(player, itemStacks, bpID));
+					}
+					catch(Exception e)
+					{
+						plugin.getLogger().log(Level.SEVERE, "Failed to create loaded backpack inventory.", e);
 						callback.onFail();
 					}
 				});
 			}
-			catch(SQLException e)
+			catch(Exception e)
 			{
-				plugin.getLogger().log(Level.SEVERE, "Failed to load backpack! Error: {0}", e.getMessage());
+				plugin.getLogger().log(Level.SEVERE, "Failed to load backpack!", e);
 				Minepacks.getScheduler().runNextTick(task1 -> callback.onFail());
 			}
 		});
