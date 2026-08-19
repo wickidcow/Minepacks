@@ -36,13 +36,23 @@
 
 [![Logo][banner]][spigot]
 
-Minepacks is a free and reliable backpack plugin for minecraft server running bukkit or spigot.
+Minepacks is a free and reliable backpack plugin for Minecraft servers running Bukkit, Spigot, or Paper.
 
 [![ciImg]][ci] [![releaseImg]][release]
 [![apiVersionImg]][api] [![licenseImg]][license] [![spigotRatingImg]][spigot]
 
 [![featureRequestsImg]][featureRequests] [![bugReportsImg]][bugReports]
 [![spigotDownloadsImg]][spigot] [![bukkitDownloadsImg]][bukkit]
+
+## Paper compatibility in this fork
+
+This fork keeps the original Minepacks feature set and broad Bukkit/Spigot compatibility while making Paper use the stable Bukkit plugin-loading and inventory APIs.
+
+* Paper no longer uses the experimental `paper-plugin.yml` / `PluginBootstrap` path.
+* Backpack inventory opening on Paper avoids version-specific menu/NMS title rewriting.
+* The Minecraft upper-version safety gate remains in place to protect stored backpack data until each new server version is validated.
+* Folia is not currently advertised as supported. Region-thread compatibility should be validated separately before enabling that declaration again.
+* Per-viewer custom backpack-title rewriting is intentionally not used on Paper; the normal backpack inventory title is used instead.
 
 ## Features:
 * [Configuration][config]
