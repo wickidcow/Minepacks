@@ -123,9 +123,11 @@ public class SQLite extends SQL
 	@Override
 	public void updatePlayer(final Player player)
 	{
+		final String playerName = player.getName();
+		final String playerUUID = getPlayerFormattedUUID(player);
 		Minepacks.getScheduler().runAsync(task -> {
-			runStatement(queryUpdatePlayerAdd, player.getName(), getPlayerFormattedUUID(player));
-			runStatement("UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", player.getName(), getPlayerFormattedUUID(player));
+			runStatement(queryUpdatePlayerAdd, playerName, playerUUID);
+			runStatement("UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", playerName, playerUUID);
 		});
 	}
 }
