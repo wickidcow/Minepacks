@@ -260,6 +260,7 @@ public class ItemShortcut extends MinepacksListener
 						if(plugin.getItemFilter() == null || !plugin.getItemFilter().isItemBlocked(stack))
 						{
 							ItemStack full = backpack.addItem(stack);
+							backpack.save();
 							stack.setAmount((full == null) ? 0 : full.getAmount());
 							event.setCursor(full);
 							event.setCancelled(true);
@@ -317,12 +318,17 @@ public class ItemShortcut extends MinepacksListener
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onItemDrag(InventoryDragEvent event)
 	{
-		if(!event.getInventory().equals(event.getWhoClicked().getInventory()) && event.getRawSlots().containsAll(event.getInventorySlots()))
+		if(event.getInventory().equals(event.getWhoClicked().getInventory())) return;
+		if(!isItemShortcut(event.getCursor()) && !isItemShortcut(event.getOldCursor())) return;
+
+		final int topInventorySize = event.getInventory().getSize();
+		for(int rawSlot : event.getRawSlots())
 		{
-			if(isItemShortcut(event.getCursor()) || isItemShortcut(event.getOldCursor()))
+			if(rawSlot < topInventorySize)
 			{
 				event.setCancelled(true);
 				messageDoNotRemoveItem.send(event.getWhoClicked());
+				return;
 			}
 		}
 	}
