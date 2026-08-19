@@ -21,6 +21,7 @@ import at.pcgamingfreaks.Bukkit.MCVersion;
 import at.pcgamingfreaks.Bukkit.Message.Message;
 import at.pcgamingfreaks.Bukkit.Util.InventoryUtils;
 import at.pcgamingfreaks.Minepacks.Bukkit.Database.Helper.InventoryCompressor;
+import at.pcgamingfreaks.ServerType;
 import at.pcgamingfreaks.Util.StringUtils;
 
 import org.bukkit.Bukkit;
@@ -60,10 +61,12 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 
 	public static void setTitle(final @NotNull String title, final @NotNull String titleOther)
 	{
-		titleOwnGlobal = title.contains("%s") ? null : InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(title);
 		titleFormat = title;
 		titleOtherFormat = titleOther;
 		useDynTitle = !title.equals(titleOther);
+		// Paper's public inventory API is stable, but the old custom-title helper reaches into
+		// version-specific menu/NMS internals. Avoid preparing those internals on Paper entirely.
+		titleOwnGlobal = ServerType.isPaperCompatible() || title.contains("%s") ? null : InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(title);
 	}
 
 	public Backpack(OfflinePlayer owner)
@@ -89,7 +92,8 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 		this.size = size;
 		ownerDatabaseId = ID;
 
-		if (titleOwnGlobal != null) titleOwn = titleOwnGlobal;
+		if(ServerType.isPaperCompatible()) titleOwn = null;
+		else if (titleOwnGlobal != null) titleOwn = titleOwnGlobal;
 		else titleOwn = InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(String.format(titleFormat, owner.getName()));
 	}
 	
@@ -172,7 +176,13 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 	{
 		checkResize();
 		opened.put(player, editable);
-		if(useDynTitle && ownerId.equals(player.getUniqueId())) InventoryUtils.openInventoryWithCustomTitlePrepared(player, bp, titleOwn);
+		if(ServerType.isPaperCompatible())
+		{
+			// Use the public API on Paper. Per-viewer title rewriting used NMS menu internals and
+			// has repeatedly broken when Paper's mappings/menu implementation changed.
+			player.openInventory(bp);
+		}
+		else if(useDynTitle && ownerId.equals(player.getUniqueId())) InventoryUtils.openInventoryWithCustomTitlePrepared(player, bp, titleOwn);
 		else player.openInventory(bp);
 	}
 
@@ -186,7 +196,8 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 		}
 		checkResize();
 		opened.put(player, editable);
-		InventoryUtils.openInventoryWithCustomTitle(player, bp, title);
+		if(ServerType.isPaperCompatible()) player.openInventory(bp);
+		else InventoryUtils.openInventoryWithCustomTitle(player, bp, title);
 	}
 
 	public void close(Player p)
