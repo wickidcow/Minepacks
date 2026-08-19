@@ -31,6 +31,8 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -128,15 +130,33 @@ public class Files extends Database
 	public void saveBackpack(Backpack backpack)
 	{
 		File save = new File(saveFolder, getFileName(backpack.getOwnerId()));
-		try(FileOutputStream fos = new FileOutputStream(save))
+		File temp = new File(saveFolder, save.getName() + ".tmp");
+		try
 		{
-			fos.write(itsSerializer.getUsedSerializer());
-			fos.write(itsSerializer.serialize(backpack.getInventory()));
-			fos.flush();
+			try(FileOutputStream fos = new FileOutputStream(temp))
+			{
+				fos.write(itsSerializer.getUsedSerializer());
+				fos.write(itsSerializer.serialize(backpack.getInventory()));
+				fos.flush();
+				fos.getFD().sync();
+			}
+
+			try
+			{
+				java.nio.file.Files.move(temp.toPath(), save.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			}
+			catch(AtomicMoveNotSupportedException ignored)
+			{
+				java.nio.file.Files.move(temp.toPath(), save.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			}
 		}
 		catch(Exception e)
 		{
 			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack.", e);
+			if(temp.exists() && !temp.delete())
+			{
+				plugin.getLogger().warning("Failed to remove temporary backpack file (" + temp.getAbsolutePath() + ").");
+			}
 		}
 	}
 
