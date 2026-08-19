@@ -77,7 +77,13 @@ public abstract class Database implements Listener
 	{
 		HandlerList.unregisterAll(this);
 		asyncSave = false;
-		backpacks.forEach((key, value) -> { if (forceSaveOnUnload) { value.setChanged(); } value.closeAll(); });
+		// A normal save marks the backpack clean as soon as an async write is queued. During
+		// shutdown/reload that queued write may not have reached storage yet, so always force one
+		// final synchronous snapshot of every cached backpack before clearing the cache.
+		backpacks.forEach((key, value) -> {
+			value.setChanged();
+			value.closeAll();
+		});
 		backpacks.clear();
 		unCacheStrategy.close();
 	}
