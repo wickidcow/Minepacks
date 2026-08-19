@@ -202,6 +202,11 @@ public abstract class SQL extends Database
 		runStatementAsync(queryUpdatePlayerAdd, player.getName(), getPlayerFormattedUUID(player), player.getName());
 	}
 
+	protected void ensurePlayerForSave(final Connection connection, final String playerName, final String playerUUID) throws SQLException
+	{
+		DBTools.runStatement(connection, queryUpdatePlayerAdd, playerName, playerUUID, playerName);
+	}
+
 	@Override
 	public void saveBackpack(final Backpack backpack)
 	{
@@ -225,7 +230,7 @@ public abstract class SQL extends Database
 					{
 						// Player creation is normally queued on join, but a very fast first save can race
 						// that async insert. Upsert here too so the first backpack snapshot is never lost.
-						DBTools.runStatement(connection, queryUpdatePlayerAdd, name, nameOrUUID, name);
+						ensurePlayerForSave(connection, name, nameOrUUID);
 						try(PreparedStatement ps = connection.prepareStatement(queryGetPlayerID))
 						{
 							ps.setString(1, nameOrUUID);
