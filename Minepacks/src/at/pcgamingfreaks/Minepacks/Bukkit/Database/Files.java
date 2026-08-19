@@ -162,17 +162,29 @@ public class Files extends Database
 
 	@Override
 	protected void loadBackpack(final OfflinePlayer player, final Callback<Backpack> callback)
-	{ //TODO this needs to be done async!
-		File save = new File(saveFolder, getFileName(player.getUniqueId()));
-		ItemStack[] itemStacks = readFile(itsSerializer, save, plugin.getLogger());
-		if(itemStacks != null)
-		{
-			callback.onResult(new Backpack(player, itemStacks, -1));
-		}
-		else
-		{
-			callback.onFail();
-		}
+	{
+		final File save = new File(saveFolder, getFileName(player.getUniqueId()));
+		// File I/O and item deserialization can be relatively expensive and do not need Bukkit's
+		// server thread. Only the Bukkit inventory object itself is created back on that thread.
+		Minepacks.getScheduler().runAsync(task -> {
+			final ItemStack[] itemStacks = readFile(itsSerializer, save, plugin.getLogger());
+			Minepacks.getScheduler().runNextTick(task1 -> {
+				if(itemStacks == null)
+				{
+					callback.onFail();
+					return;
+				}
+				try
+				{
+					callback.onResult(new Backpack(player, itemStacks, -1));
+				}
+				catch(Exception e)
+				{
+					plugin.getLogger().log(Level.SEVERE, "Failed to create loaded backpack inventory.", e);
+					callback.onFail();
+				}
+			});
+		});
 	}
 
 	protected static @Nullable ItemStack[] readFile(@NotNull InventorySerializer itsSerializer, @NotNull File file, @NotNull Logger logger)
