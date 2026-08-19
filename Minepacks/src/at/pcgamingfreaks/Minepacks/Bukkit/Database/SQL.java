@@ -207,6 +207,12 @@ public abstract class SQL extends Database
 		DBTools.runStatement(connection, queryUpdatePlayerAdd, playerName, playerUUID, playerName);
 	}
 
+	private void markBackpackDirtyForRetry(final Backpack backpack)
+	{
+		if(asyncSave) Minepacks.getScheduler().runNextTick(task -> backpack.setChanged());
+		else backpack.setChanged();
+	}
+
 	@Override
 	public void saveBackpack(final Backpack backpack)
 	{
@@ -247,6 +253,7 @@ public abstract class SQL extends Database
 								{
 									plugin.getLogger().warning("Failed saving backpack for: " + name + " (Unable to get players ID from database)");
 									writeBackup(name, nameOrUUID, usedSerializer, data);
+									markBackpackDirtyForRetry(backpack);
 								}
 							}
 						}
@@ -260,6 +267,7 @@ public abstract class SQL extends Database
 				{
 					plugin.getLogger().log(Level.SEVERE, "Failed to save backpack in database! Error: {0}", e.getMessage());
 					writeBackup(name, nameOrUUID, usedSerializer, data);
+					markBackpackDirtyForRetry(backpack);
 				}
 			}
 		};
