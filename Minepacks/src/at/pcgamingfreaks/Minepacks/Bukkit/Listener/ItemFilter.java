@@ -134,7 +134,10 @@ public class ItemFilter extends MinepacksListener implements at.pcgamingfreaks.M
 	{
 		if(event.getInventory().getType() == InventoryType.CHEST && event.getInventory().getHolder() instanceof Backpack && (isItemBlocked(event.getOldCursor()) || isItemBlocked(event.getCursor())) && event.getRawSlots().containsAll(event.getInventorySlots()))
 		{
-			sendNotAllowedMessage((Player) event.getView().getPlayer(), event.getOldCursor());
+			if(event.getWhoClicked() instanceof Player)
+			{
+				sendNotAllowedMessage((Player) event.getWhoClicked(), event.getOldCursor());
+			}
 			event.setCancelled(true);
 		}
 	}
