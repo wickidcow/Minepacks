@@ -124,7 +124,10 @@ public abstract class Database implements Listener
 			database.init();
 			return database;
 		}
-		catch(IllegalStateException ignored) {}
+		catch(IllegalStateException e)
+		{
+			plugin.getLogger().log(Level.SEVERE, "Minepacks refused to initialize backpack storage because a safe serializer or database state is unavailable.", e);
+		}
 		catch(Exception e)
 		{
 			plugin.getLogger().log(Level.SEVERE, "Failed to initialize database.", e);
