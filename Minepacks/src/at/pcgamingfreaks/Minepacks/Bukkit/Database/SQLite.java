@@ -76,6 +76,13 @@ public class SQLite extends SQL
 		queryUpdatePlayerAdd = "INSERT OR IGNORE INTO {TablePlayers} ({FieldName},{FieldUUID}) VALUES (?,?);";
 	}
 
+	@Override
+	protected void ensurePlayerForSave(final Connection connection, final String playerName, final String playerUUID) throws SQLException
+	{
+		DBTools.runStatement(connection, queryUpdatePlayerAdd, playerName, playerUUID);
+		DBTools.runStatement(connection, "UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", playerName, playerUUID);
+	}
+
 	@SuppressWarnings("SqlResolve")
 	@Override
 	protected void checkDB()
