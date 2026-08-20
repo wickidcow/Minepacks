@@ -41,13 +41,12 @@ public abstract class SpecialInfoBase implements Listener
 	{
 		if(event.getPlayer().hasPermission(permission))
 		{
-			Minepacks.getScheduler().runLater(() ->
-				Minepacks.getScheduler().runAtEntity(event.getPlayer(), task -> {
-					if(event.getPlayer().isOnline())
-					{
-						sendMessage(event.getPlayer());
-					}
-				}), 3 * 20L); // Run with a 3 seconds delay
+			Minepacks.getScheduler().runAtEntityLater(event.getPlayer(), () -> {
+				if(event.getPlayer().isOnline())
+				{
+					sendMessage(event.getPlayer());
+				}
+			}, 3 * 20L);
 		}
 	}
 
