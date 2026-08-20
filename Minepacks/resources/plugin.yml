@@ -51,7 +51,7 @@ permissions:
     children:
       backpack.others: true
       backpack.others.edit: true
-      backpack.clean.others: true
+      backpack.clean.other: true
       backpack.update: true
       backpack.reload: true
       backpack.migrate: true
