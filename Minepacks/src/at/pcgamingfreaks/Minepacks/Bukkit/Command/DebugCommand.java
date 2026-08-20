@@ -119,7 +119,7 @@ public class DebugCommand extends MinepacksCommand
 		Minepacks.getScheduler().runAtEntityLater(sender, () -> sender.performCommand("backpack"), 5*20L);
 		Minepacks.getScheduler().runAtEntityLater(sender, () -> Bukkit.getPluginManager().callEvent(new ClickEvent(sender.getOpenInventory(), InventoryType.SlotType.QUICKBAR, InventoryUtils.getPlayerTopInventory(sender).getSize() + 27, ClickType.LEFT, InventoryAction.PICKUP_ALL)), 10*20L);
 		Minepacks.getScheduler().runAtEntityLater(sender, sender::closeInventory, 20*20L);
-		Minepacks.getScheduler().runLater(() -> {
+		Minepacks.getScheduler().runAtEntityLater(sender, () -> {
 			try
 			{
 				writer.flush();
@@ -127,8 +127,11 @@ public class DebugCommand extends MinepacksCommand
 				writer = null;
 			}
 			catch(Exception e) { plugin.getLogger().log(Level.SEVERE, "Error while writing debug file.", e);}
-			sender.getInventory().setItem(0, slot);
-			messageDone.send(sender);
+			if(sender.isOnline())
+			{
+				sender.getInventory().setItem(0, slot);
+				messageDone.send(sender);
+			}
 		}, 30*20L);
 	}
 
@@ -137,6 +140,11 @@ public class DebugCommand extends MinepacksCommand
 	public void execute(@NotNull CommandSender commandSender, @NotNull String mainCommandAlias, @NotNull String alias, @NotNull String[] args)
 	{
 		if(writer != null) return;
+		if(Minepacks.isFoliaServer() && args.length == 2 && (args[0].equals("permissions") || args[0].equals("size")))
+		{
+			commandSender.sendMessage("Cross-player Minepacks debug probes are disabled on Folia for region-thread safety.");
+			return;
+		}
 		if (args.length == 2 && args[0].equals("permissions"))
 		{
 			Player player = Bukkit.getServer().getPlayer(args[1]);
