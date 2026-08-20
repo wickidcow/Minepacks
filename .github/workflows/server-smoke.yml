@@ -30,7 +30,7 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: Build Minepacks Release JAR
+      - name: Build Minepacks runtime JARs
         shell: bash
         run: |
           set -euo pipefail
@@ -40,15 +40,19 @@ jobs:
             tail -n 120 "$MAVEN_LOG" >&2
             exit 1
           fi
+          STANDALONE_JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
+          test -n "$STANDALONE_JAR"
+          cp "$STANDALONE_JAR" "$RUNNER_TEMP/Minepacks-Standalone.jar"
+
           if ! mvn -q --no-transfer-progress -B -s .github/workflows/settings.xml clean package -P Release --file pom.xml >>"$MAVEN_LOG" 2>&1; then
             echo 'Minepacks Release build failed.' >&2
             tail -n 120 "$MAVEN_LOG" >&2
             exit 1
           fi
-          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Release.jar' -print -quit)"
-          test -n "$JAR"
-          cp "$JAR" "$RUNNER_TEMP/Minepacks-Release.jar"
-          echo "Built $(basename "$JAR") for server smoke testing."
+          RELEASE_JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Release.jar' -print -quit)"
+          test -n "$RELEASE_JAR"
+          cp "$RELEASE_JAR" "$RUNNER_TEMP/Minepacks-Release.jar"
+          echo "Built $(basename "$STANDALONE_JAR") and $(basename "$RELEASE_JAR") for server smoke testing."
 
       - name: Download Paper, Purpur, and Folia 26.2
         shell: bash
@@ -97,7 +101,19 @@ jobs:
             rm -f "$RUNNER_TEMP/servers/folia.jar"
           fi
 
-      - name: Boot Paper and verify Minepacks
+      - name: Boot Paper with direct Standalone JAR
+        shell: bash
+        env:
+          EXPECTED_LOG: 'Paper compatibility enabled using the stable Bukkit plugin loading path.'
+        run: |
+          set -euo pipefail
+          bash .github/workflows/smoke-server.sh \
+            "$RUNNER_TEMP/servers/paper.jar" \
+            "$RUNNER_TEMP/Minepacks-Standalone.jar" \
+            "$RUNNER_TEMP/smoke-paper-standalone" \
+            "$EXPECTED_LOG"
+
+      - name: Boot Paper and verify Release JAR
         shell: bash
         env:
           SERVER_TYPE: paper
@@ -107,7 +123,7 @@ jobs:
           bash .github/workflows/smoke-server.sh \
             "$RUNNER_TEMP/servers/${SERVER_TYPE}.jar" \
             "$RUNNER_TEMP/Minepacks-Release.jar" \
-            "$RUNNER_TEMP/smoke-${SERVER_TYPE}" \
+            "$RUNNER_TEMP/smoke-${SERVER_TYPE}-release" \
             "$EXPECTED_LOG"
 
       - name: Boot Purpur and verify Minepacks
