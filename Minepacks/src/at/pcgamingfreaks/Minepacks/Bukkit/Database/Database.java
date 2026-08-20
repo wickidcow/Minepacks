@@ -249,6 +249,20 @@ public abstract class Database implements Listener
 		return newLoad;
 	}
 
+	private void dispatchBackpackCallback(@NotNull OfflinePlayer owner, @NotNull Runnable callback)
+	{
+		if(Minepacks.isFoliaServer())
+		{
+			Player onlineOwner = owner.getPlayer();
+			if(onlineOwner != null)
+			{
+				Minepacks.getScheduler().runAtEntity(onlineOwner, task -> callback.run());
+				return;
+			}
+		}
+		callback.run();
+	}
+
 	public void getBackpack(final OfflinePlayer player, final Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack> callback, final boolean createNewOnFail)
 	{
 		if(player == null || player.getClass().getName().contains("NPC"))
@@ -258,7 +272,7 @@ public abstract class Database implements Listener
 		}
 
 		final UUID playerId = player.getUniqueId();
-		getOrStartBackpackLoad(player).whenComplete((loadedBackpack, error) -> {
+		getOrStartBackpackLoad(player).whenComplete((loadedBackpack, error) -> dispatchBackpackCallback(player, () -> {
 			if(error != null)
 			{
 				if(!(error instanceof java.util.concurrent.CancellationException))
@@ -281,8 +295,8 @@ public abstract class Database implements Listener
 
 			try
 			{
-				// All load implementations complete on the server thread; computeIfAbsent makes sure
-				// simultaneous first-time requests still receive one shared Backpack instance.
+				// The callback is on the owner's entity scheduler on Folia when the owner is online.
+				// computeIfAbsent guarantees simultaneous first-time requests still share one object.
 				Backpack created = backpacks.computeIfAbsent(playerId, ignored -> new Backpack(player));
 				callback.onResult(created);
 			}
@@ -291,7 +305,7 @@ public abstract class Database implements Listener
 				plugin.getLogger().log(Level.SEVERE, "Failed to create backpack for " + playerId + ".", e);
 				callback.onFail();
 			}
-		});
+		}));
 	}
 
 	public void getBackpack(final OfflinePlayer player, final Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack> callback)
