@@ -67,6 +67,19 @@ public static Inventory getPlayerBackpackInventory(Player player) {
 ```
 This will return null if the backpack is not loaded or the inventory of the backpack if the backpack is already loaded.
 
+### Folia thread ownership
+
+Minepacks schedules its own player operations through Folia entity schedulers, but the API intentionally returns Bukkit objects directly rather than hiding them behind blocking cross-region calls.
+
+When running on Folia:
+
+* Access or mutate a live backpack `Inventory` only from the backpack owner's entity thread.
+* Do not pass one live backpack inventory between players in different regions.
+* Prefer Minepacks API methods such as `openBackpack(...)` for GUI opening so Minepacks can perform the appropriate entity-scheduler handoff.
+* Treat callbacks involving an online backpack owner as owner-context work. If your plugin needs to continue on another player's region, explicitly hand off to that player's entity scheduler.
+
+Paper, Purpur, Bukkit, and Spigot keep their normal API behavior; these restrictions are specifically about Folia's region ownership model.
+
 ## Links:
 * [JavaDoc][apiJavaDoc]
 * [API Build Server][apiBuilds]
