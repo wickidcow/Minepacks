@@ -89,6 +89,9 @@ public class ItemsCollector extends CancellableRunnable {
 				// Only check loaded backpacks (loading them would take too much time for a repeating task, the backpack will be loaded async soon enough)
 				Backpack backpack = (Backpack) plugin.getBackpackCachedOnly(player);
 				if (backpack == null) return;
+				// On Folia, do not let a periodic worker mutate the same live Inventory that the
+				// player's GUI is currently using. It will resume on the next collection pass.
+				if(Minepacks.isFoliaServer() && backpack.isOpen()) return;
 
 				List<Entity> entities = player.getNearbyEntities(radius, radius, radius);
 				for(Entity entity : entities)
