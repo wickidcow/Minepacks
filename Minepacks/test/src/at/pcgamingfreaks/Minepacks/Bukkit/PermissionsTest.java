@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,6 +76,36 @@ public class PermissionsTest
 			if(perm.contains(".size.")) continue; // Ignore size permissions
 			if(countKeysStartingWith(keys, perm + ".children") > 1) continue; // Skip all the permissions that are just for permission grouping
 			assertTrue(permissions.contains(perm), "The plugin.yml should not contain the permission " + perm);
+		}
+	}
+
+	@Test
+	public void testPermissionGroupChildrenAreDeclared() throws IOException, YamlInvalidContentException, YamlKeyNotFoundException
+	{
+		YAML pluginYaml = new YAML(new File("resources/plugin.yml"));
+		YAML permissionsYaml = pluginYaml.getSection("permissions");
+		Collection<String> keys = permissionsYaml.getKeys(true);
+		Set<String> declared = new HashSet<>();
+
+		for(String key : keys)
+		{
+			if(key.endsWith(".description"))
+			{
+				declared.add(key.substring(0, key.length() - ".description".length()));
+			}
+			int childrenIndex = key.indexOf(".children.");
+			if(childrenIndex > 0)
+			{
+				declared.add(key.substring(0, childrenIndex));
+			}
+		}
+
+		for(String key : keys)
+		{
+			int childrenIndex = key.indexOf(".children.");
+			if(childrenIndex <= 0) continue;
+			String childPermission = key.substring(childrenIndex + ".children.".length());
+			assertTrue(declared.contains(childPermission), "Permission group child should reference a declared permission: " + childPermission);
 		}
 	}
 }

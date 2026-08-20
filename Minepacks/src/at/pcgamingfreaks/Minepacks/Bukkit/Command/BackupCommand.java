@@ -48,6 +48,18 @@ public class BackupCommand extends MinepacksCommand
 		messageNoBackpack = plugin.getLanguage().getMessage("Ingame.Backup.NoBackpack");
 	}
 
+	private void sendToSender(@NotNull CommandSender sender, @NotNull Runnable message)
+	{
+		if(Minepacks.isFoliaServer() && sender instanceof Player)
+		{
+			Minepacks.getScheduler().runAtEntity((Player) sender, task -> message.run());
+		}
+		else
+		{
+			message.run();
+		}
+	}
+
 	@Override
 	public void execute(final @NotNull CommandSender sender, final @NotNull String mainCommandAlias, final @NotNull String alias, final @NotNull String[] args)
 	{
@@ -79,13 +91,13 @@ public class BackupCommand extends MinepacksCommand
 			public void onResult(Backpack backpack)
 			{
 				((at.pcgamingfreaks.Minepacks.Bukkit.Backpack) backpack).backup();
-				messageCreated.send(sender);
+				sendToSender(sender, () -> messageCreated.send(sender));
 			}
 
 			@Override
 			public void onFail()
 			{
-				messageNoBackpack.send(sender);
+				sendToSender(sender, () -> messageNoBackpack.send(sender));
 			}
 		}, false);
 	}

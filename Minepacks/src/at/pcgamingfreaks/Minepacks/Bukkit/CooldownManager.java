@@ -26,14 +26,14 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CooldownManager extends CancellableRunnable implements Listener
 {
 	private final Minepacks plugin;
-	private final Map<UUID, Long> cooldowns = new HashMap<>();
+	private final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
 	private final long cooldown;
 	private final boolean syncCooldown, addOnJoin, clearOnLeave;
 

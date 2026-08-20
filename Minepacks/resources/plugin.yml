@@ -5,9 +5,9 @@ main: "${mainClass}"
 description: "${project.description}"
 version: "${pluginVersion}"
 api-version: "1.13"
+folia-supported: true
 depend: [${dependencies}]
 softdepend: [MVdWPlaceholderAPI, PlaceholderAPI ${soft-dependencies}]
-folia-supported: true
 
 permissions:
   backpack.*:
@@ -52,7 +52,7 @@ permissions:
     children:
       backpack.others: true
       backpack.others.edit: true
-      backpack.clean.others: true
+      backpack.clean.other: true
       backpack.update: true
       backpack.reload: true
       backpack.migrate: true

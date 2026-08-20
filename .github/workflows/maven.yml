@@ -1,9 +1,16 @@
-# This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+# This workflow builds the compatibility matrix and validates the self-contained production JAR.
 
 name: Build
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   buildAndTest:
@@ -19,5 +26,34 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
-      - name: Build and test with maven
+      - name: Build and test with Maven
         run: mvn -B -s .github/workflows/settings.xml clean package --file pom.xml
+
+  productionPackage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build self-contained production package
+        run: mvn -B -s .github/workflows/settings.xml clean package -P Standalone --file pom.xml
+      - name: Validate packaged server metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
+          test -n "$JAR"
+          unzip -p "$JAR" plugin.yml | grep -q '^folia-supported: true$'
+          unzip -p "$JAR" plugin.yml | grep -q '^main: "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"$'
+          if unzip -l "$JAR" | grep -q 'paper-plugin.yml'; then
+            echo 'Experimental paper-plugin.yml must not be present in the production JAR.' >&2
+            exit 1
+          fi
+          if unzip -l "$JAR" | grep -q 'MinepacksBadRabbit.class'; then
+            echo 'BadRabbit must not be present in the production JAR.' >&2
+            exit 1
+          fi

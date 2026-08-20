@@ -55,11 +55,17 @@ public class InventorySerializer
 		}
 		if(serializer == null)
 		{
-			logger.severe("NBTItemStackSerializer does not support your Minecraft version!\nFalling back to BukkitItemStackSerializer! This most likely is wrong!");
 			if (MCVersion.isOlderThan(MCVersion.MC_NMS_1_8_R1))
 			{
 				usedSerializer = 0;
 				serializer = BUKKIT_ITEM_STACK_SERIALIZER;
+			}
+			else
+			{
+				// On modern servers, falling back to Bukkit serialization can silently strip item
+				// metadata when Minecraft's item format changes. Refuse to load/save instead of
+				// risking a destructive rewrite of existing backpack data.
+				throw new IllegalStateException("No safe NBT item-stack serializer is available for this Minecraft server version.");
 			}
 		}
 		this.serializer = serializer;

@@ -76,6 +76,13 @@ public class SQLite extends SQL
 		queryUpdatePlayerAdd = "INSERT OR IGNORE INTO {TablePlayers} ({FieldName},{FieldUUID}) VALUES (?,?);";
 	}
 
+	@Override
+	protected void ensurePlayerForSave(final Connection connection, final String playerName, final String playerUUID) throws SQLException
+	{
+		DBTools.runStatement(connection, queryUpdatePlayerAdd, playerName, playerUUID);
+		DBTools.runStatement(connection, "UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", playerName, playerUUID);
+	}
+
 	@SuppressWarnings("SqlResolve")
 	@Override
 	protected void checkDB()
@@ -123,9 +130,11 @@ public class SQLite extends SQL
 	@Override
 	public void updatePlayer(final Player player)
 	{
+		final String playerName = player.getName();
+		final String playerUUID = getPlayerFormattedUUID(player);
 		Minepacks.getScheduler().runAsync(task -> {
-			runStatement(queryUpdatePlayerAdd, player.getName(), getPlayerFormattedUUID(player));
-			runStatement("UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", player.getName(), getPlayerFormattedUUID(player));
+			runStatement(queryUpdatePlayerAdd, playerName, playerUUID);
+			runStatement("UPDATE `" + tablePlayers + "` SET `" + fieldPlayerName + "`=? WHERE `" + fieldPlayerUUID + "`=?;", playerName, playerUUID);
 		});
 	}
 }

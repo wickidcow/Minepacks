@@ -1,0 +1,138 @@
+name: Server Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * 3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  startup-smoke:
+    name: Paper / Purpur / Folia 26.2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build Minepacks production JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAVEN_LOG="$RUNNER_TEMP/minepacks-smoke-maven.log"
+          if ! mvn -q --no-transfer-progress -B -s .github/workflows/settings.xml clean package -P Standalone --file pom.xml >"$MAVEN_LOG" 2>&1; then
+            echo 'Minepacks production build failed.' >&2
+            tail -n 120 "$MAVEN_LOG" >&2
+            exit 1
+          fi
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
+          test -n "$JAR"
+          cp "$JAR" "$RUNNER_TEMP/Minepacks-Production.jar"
+          unzip -p "$RUNNER_TEMP/Minepacks-Production.jar" plugin.yml | grep -q '^folia-supported: true$'
+          unzip -p "$RUNNER_TEMP/Minepacks-Production.jar" plugin.yml | grep -q '^main: "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"$'
+          if unzip -l "$RUNNER_TEMP/Minepacks-Production.jar" | grep -q 'MinepacksBadRabbit.class'; then
+            echo 'BadRabbit must not be present in the production JAR.' >&2
+            exit 1
+          fi
+          echo "Built $(basename "$JAR") as the production server JAR."
+
+      - name: Download Paper, Purpur, and Folia 26.2
+        shell: bash
+        env:
+          MINECRAFT_VERSION: '26.2'
+          PAPERMC_USER_AGENT: 'Minepacks-CI/2.5.9.1 (https://github.com/wickidcow/Minepacks)'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/servers"
+
+          download_fill_build() {
+            local project="$1"
+            local channel_mode="$2"
+            local output="$3"
+            local response url
+
+            response="$(curl -fsSL --retry 3 --retry-delay 2 \
+              -H "User-Agent: $PAPERMC_USER_AGENT" \
+              "https://fill.papermc.io/v3/projects/${project}/versions/${MINECRAFT_VERSION}/builds")"
+
+            if [ "$channel_mode" = 'stable' ]; then
+              url="$(printf '%s' "$response" | jq -r 'first(.[] | select(.channel == "STABLE") | .downloads."server:default".url) // empty')"
+            else
+              url="$(printf '%s' "$response" | jq -r 'first(.[] | select(.channel == "STABLE" or .channel == "BETA") | .downloads."server:default".url) // empty')"
+            fi
+
+            if [ -z "$url" ]; then
+              echo "No suitable ${project} ${MINECRAFT_VERSION} build was returned by PaperMC Fill." >&2
+              return 1
+            fi
+
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -H "User-Agent: $PAPERMC_USER_AGENT" \
+              "$url" -o "$output"
+          }
+
+          download_fill_build paper stable "$RUNNER_TEMP/servers/paper.jar"
+          curl -fsSL --retry 3 --retry-delay 2 \
+            "https://api.purpurmc.org/v2/purpur/${MINECRAFT_VERSION}/latest/download" \
+            -o "$RUNNER_TEMP/servers/purpur.jar"
+
+          if ! download_fill_build folia beta "$RUNNER_TEMP/servers/folia.jar"; then
+            echo 'Folia 26.2 build unavailable; Folia smoke will be skipped for this run.'
+            rm -f "$RUNNER_TEMP/servers/folia.jar"
+          fi
+
+      - name: Boot Paper and verify Minepacks
+        shell: bash
+        env:
+          EXPECTED_LOG: 'Paper compatibility enabled using the stable Bukkit plugin loading path.'
+        run: |
+          set -euo pipefail
+          bash .github/workflows/smoke-server.sh \
+            "$RUNNER_TEMP/servers/paper.jar" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-paper" \
+            "$EXPECTED_LOG"
+
+      - name: Boot Purpur and verify Minepacks
+        shell: bash
+        env:
+          EXPECTED_LOG: 'Purpur compatibility enabled using the stable Paper/Bukkit API path.'
+        run: |
+          set -euo pipefail
+          bash .github/workflows/smoke-server.sh \
+            "$RUNNER_TEMP/servers/purpur.jar" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-purpur" \
+            "$EXPECTED_LOG"
+
+      - name: Boot Folia and verify Minepacks
+        shell: bash
+        env:
+          EXPECTED_LOG: 'Folia compatibility enabled with entity-aware scheduling.'
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/servers/folia.jar" ]; then
+            echo '::warning::Folia 26.2 build was unavailable from PaperMC Fill; smoke skipped.'
+            exit 0
+          fi
+
+          bash .github/workflows/smoke-server.sh \
+            "$RUNNER_TEMP/servers/folia.jar" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-folia" \
+            "$EXPECTED_LOG"

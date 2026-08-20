@@ -35,6 +35,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class OpenCommand extends MinepacksCommand
 {
@@ -115,22 +116,57 @@ public class OpenCommand extends MinepacksCommand
 
 	void handleOpenFromConsole(final @NotNull CommandSender sender, final @NotNull String[] names)
 	{
-		int opened = 0;
-		List<String> notOnline = new ArrayList<>(names.length);
+		if(!Minepacks.isFoliaServer())
+		{
+			int opened = 0;
+			List<String> notOnline = new ArrayList<>(names.length);
+			for(String name : names)
+			{
+				Player target = Bukkit.getPlayer(name);
+				if (target == null)
+				{
+					notOnline.add(name);
+				}
+				else if (target.hasPermission(Permissions.USE))
+				{
+					opened++;
+					plugin.openBackpack(target, target, true);
+				}
+			}
+			sender.sendMessage("Opened backpack of " + opened + " players." + (notOnline.isEmpty() ? "" : " Not online: " + String.join(", ", notOnline)));
+			return;
+		}
+
+		final List<String> notOnline = new ArrayList<>(names.length);
+		final List<Player> onlineTargets = new ArrayList<>(names.length);
 		for(String name : names)
 		{
 			Player target = Bukkit.getPlayer(name);
-			if (target == null)
-			{
-				notOnline.add(name);
-			}
-			else if (target.hasPermission(Permissions.USE))
-			{
-				opened++;
-				plugin.openBackpack(target, target, true);
-			}
+			if(target == null) notOnline.add(name);
+			else onlineTargets.add(target);
 		}
-		sender.sendMessage("Opened backpack of " + opened + " players." + (notOnline.isEmpty() ? "" : " Not online: " + String.join(", ", notOnline)));
+		if(onlineTargets.isEmpty())
+		{
+			sender.sendMessage("Opened backpack of 0 players." + (notOnline.isEmpty() ? "" : " Not online: " + String.join(", ", notOnline)));
+			return;
+		}
+
+		final AtomicInteger opened = new AtomicInteger();
+		final AtomicInteger remaining = new AtomicInteger(onlineTargets.size());
+		for(Player target : onlineTargets)
+		{
+			Minepacks.getScheduler().runAtEntity(target, task -> {
+				if(target.isOnline() && target.hasPermission(Permissions.USE))
+				{
+					opened.incrementAndGet();
+					plugin.openBackpack(target, target, true);
+				}
+				if(remaining.decrementAndGet() == 0)
+				{
+					Minepacks.getScheduler().runNextTick(task1 -> sender.sendMessage("Opened backpack of " + opened.get() + " players." + (notOnline.isEmpty() ? "" : " Not online: " + String.join(", ", notOnline))));
+				}
+			});
+		}
 	}
 
 	@Override

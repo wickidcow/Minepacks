@@ -63,6 +63,8 @@ import java.io.File;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 {
@@ -89,6 +91,21 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 	private ItemShortcut shortcut = null;
 	@Getter private PlaceholderManager placeholderManager = null;
 
+	public static boolean isFoliaServer()
+	{
+		return ServerType.isFolia();
+	}
+
+	public static boolean isPurpurServer()
+	{
+		return Bukkit.getName().toLowerCase(Locale.ROOT).contains("purpur");
+	}
+
+	public static boolean isPaperFamily()
+	{
+		return ServerType.isPaperCompatible() || isPurpurServer() || isFoliaServer();
+	}
+
 	@Override
 	public boolean isRunningInStandaloneMode()
 	{
@@ -102,11 +119,26 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 	@Override
 	public void onEnable()
 	{
+		try
+		{
+			enableMinepacks();
+		}
+		catch(Throwable throwable)
+		{
+			getLogger().log(Level.SEVERE, "Minepacks failed during startup. The full cause is logged before the loader handles the failure.", throwable);
+			if(throwable instanceof Error) throw (Error) throwable;
+			if(throwable instanceof RuntimeException) throw (RuntimeException) throwable;
+			throw new RuntimeException(throwable);
+		}
+	}
+
+	private void enableMinepacks()
+	{
 		checkOldDataFolder();
 
 		if(!checkPCGF_PluginLib()) return;
 
-		if (MCVersion.isNewerOrEqualThan(MCVersion.MC_1_19_3) && ServerType.isPaperCompatible())
+		if (MCVersion.isNewerOrEqualThan(MCVersion.MC_1_19_3) && isPaperFamily())
 		{
 			PermissionLoader.loadPermissionsFromPlugin(this);
 		}
@@ -123,17 +155,25 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		lang = new Language(this);
 		load();
 
+		if(isFoliaServer())
+		{
+			getLogger().info("Folia compatibility enabled with entity-aware scheduling.");
+		}
+		else if(isPurpurServer())
+		{
+			getLogger().info("Purpur compatibility enabled using the stable Paper/Bukkit API path.");
+		}
+		else if(ServerType.isPaperCompatible())
+		{
+			getLogger().info("Paper compatibility enabled using the stable Bukkit plugin loading path.");
+		}
 		getLogger().info(StringUtils.getPluginEnabledMessage(getDescription().getName()));
 	}
 
 	private boolean checkMcVersion()
 	{
-		if (MCVersion.isNewerThan(MCVersion.MC_NMS_1_20_R3) && ServerType.isPaperCompatible())
-		{
-			getLogger().warning("Paper support is experimental! Use at your own risk!");
-			getLogger().warning("No guarantee for data integrity! Backup constantly!");
-		}
-		// DO NOT REMOVE THIS! This is protecting your data! To add support for a new version, update PCGF PluginLib and then update the last version check!
+		// Keep the upper version guard: item serialization is data-sensitive and must be explicitly
+		// validated for new Minecraft versions before allowing existing backpack data to be rewritten.
 		if (MCVersion.is(MCVersion.UNKNOWN) || !MCVersion.isUUIDsSupportAvailable() || MCVersion.isNewerThan(MCVersion.MC_NMS_26_2_R1))
 		{
 			this.warnOnVersionIncompatibility();
@@ -236,7 +276,8 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		if(config.isWorldWhitelistMode()) pluginManager.registerEvents(new WorldBlacklistUpdater(this), this);
 		//endregion
 		if(config.getFullInvCollect() || config.isFullInvToggleAllowed()) collector = new ItemsCollector(this);
-		worldBlacklist = config.getWorldBlacklist();
+		worldBlacklist = ConcurrentHashMap.newKeySet();
+		worldBlacklist.addAll(config.getWorldBlacklist());
 		worldBlacklistMode = (worldBlacklist.isEmpty()) ? WorldBlacklistMode.None : config.getWorldBlockMode();
 
 		gameModes = config.getAllowedGameModes();
@@ -269,6 +310,11 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 
 	public void reload()
 	{
+		if(isFoliaServer())
+		{
+			getLogger().warning("Live reload is disabled on Folia. Restart the server to reload Minepacks safely.");
+			return;
+		}
 		unload();
 		config.reload();
 		load();
@@ -308,12 +354,18 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 	@Override
 	public void openBackpack(@NotNull Player opener, @NotNull OfflinePlayer owner, boolean editable, @Nullable String title)
 	{
-		database.getBackpack(owner, backpack -> openBackpack(opener, backpack, editable, title));
+		database.getBackpack(owner, backpack -> getScheduler().runAtEntity(opener, task -> openBackpackNow(opener, backpack, editable, title)));
 	}
 
 	@Override
 	public void openBackpack(@NotNull Player opener, @Nullable Backpack backpack, boolean editable, @Nullable String title)
 	{
+		getScheduler().runAtEntity(opener, task -> openBackpackNow(opener, backpack, editable, title));
+	}
+
+	private void openBackpackNow(@NotNull Player opener, @Nullable Backpack backpack, boolean editable, @Nullable String title)
+	{
+		if(!opener.isOnline()) return;
 		WorldBlacklistMode disabled = isDisabled(opener);
 		if(disabled != WorldBlacklistMode.None)
 		{
@@ -332,7 +384,8 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		{
 			opener.playSound(opener.getLocation(), openSound, 1, 0);
 		}
-		backpack.open(opener, editable);
+		if(title == null) backpack.open(opener, editable);
+		else backpack.open(opener, editable, title);
 	}
 
 	@Override

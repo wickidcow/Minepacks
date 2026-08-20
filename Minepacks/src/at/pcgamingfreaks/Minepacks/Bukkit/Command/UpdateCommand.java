@@ -25,6 +25,7 @@ import at.pcgamingfreaks.Minepacks.Bukkit.Permissions;
 import at.pcgamingfreaks.Minepacks.MagicValues;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -44,6 +45,18 @@ public class UpdateCommand extends MinepacksCommand
 		messageUpdateAvailable      = plugin.getLanguage().getMessage("Ingame.Update.UpdateAvailable");
 	}
 
+	private void sendToSender(@NotNull CommandSender sender, @NotNull Runnable message)
+	{
+		if(Minepacks.isFoliaServer() && sender instanceof Player)
+		{
+			Minepacks.getScheduler().runAtEntity((Player) sender, task -> message.run());
+		}
+		else
+		{
+			message.run();
+		}
+	}
+
 	@Override
 	public void execute(@NotNull final CommandSender sender, final @NotNull String mainCommandAlias, final @NotNull String alias, final @NotNull String[] args)
 	{
@@ -51,9 +64,9 @@ public class UpdateCommand extends MinepacksCommand
 		{
 			messageCheckingForUpdates.send(sender);
 			/*if_not[STANDALONE]*/
-			((at.pcgamingfreaks.PluginLib.Bukkit.PluginLib) at.pcgamingfreaks.PluginLib.Bukkit.PluginLib.getInstance()).getUpdater().update(); // Make the PluginLib check for updates too
+			((at.pcgamingfreaks.PluginLib.Bukkit.PluginLib) at.pcgamingfreaks.PluginLib.Bukkit.PluginLib.getInstance()).getUpdater().update();
 			/*end[STANDALONE]*/
-			((Minepacks) plugin).update(result -> {
+			((Minepacks) plugin).update(result -> sendToSender(sender, () -> {
 				switch(result)
 				{
 					case SUCCESS: messageUpdated.send(sender); break;
@@ -61,7 +74,7 @@ public class UpdateCommand extends MinepacksCommand
 					case UPDATE_AVAILABLE: messageUpdateAvailable.send(sender); break;
 					default: messageUpdateFail.send(sender); break;
 				}
-			});
+			}));
 		}
 		else
 		{

@@ -132,10 +132,25 @@ public class ItemFilter extends MinepacksListener implements at.pcgamingfreaks.M
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
 	public void onItemDrag(InventoryDragEvent event)
 	{
-		if(event.getInventory().getType() == InventoryType.CHEST && event.getInventory().getHolder() instanceof Backpack && (isItemBlocked(event.getOldCursor()) || isItemBlocked(event.getCursor())) && event.getRawSlots().containsAll(event.getInventorySlots()))
+		if(event.getInventory().getType() != InventoryType.CHEST || !(event.getInventory().getHolder() instanceof Backpack)) return;
+		if(!isItemBlocked(event.getOldCursor()) && !isItemBlocked(event.getCursor())) return;
+
+		final int backpackSize = event.getInventory().getSize();
+		boolean touchesBackpack = false;
+		for(int rawSlot : event.getRawSlots())
 		{
-			sendNotAllowedMessage((Player) event.getView().getPlayer(), event.getOldCursor());
-			event.setCancelled(true);
+			if(rawSlot < backpackSize)
+			{
+				touchesBackpack = true;
+				break;
+			}
 		}
+		if(!touchesBackpack) return;
+
+		if(event.getWhoClicked() instanceof Player)
+		{
+			sendNotAllowedMessage((Player) event.getWhoClicked(), event.getOldCursor());
+		}
+		event.setCancelled(true);
 	}
 }

@@ -38,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
@@ -51,6 +52,7 @@ public abstract class Database implements Listener
 	protected boolean useUUIDSeparators, asyncSave = true;
 	protected long maxAge;
 	private final Map<UUID, Backpack> backpacks = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<UUID, CompletableFuture<Backpack>> loadingBackpacks = new ConcurrentHashMap<>();
 	private final UnCacheStrategy unCacheStrategy;
 	private final File backupFolder;
 
@@ -77,7 +79,16 @@ public abstract class Database implements Listener
 	{
 		HandlerList.unregisterAll(this);
 		asyncSave = false;
-		backpacks.forEach((key, value) -> { if (forceSaveOnUnload) { value.setChanged(); } value.closeAll(); });
+		// Prevent an in-flight load from repopulating this database instance after shutdown/reload.
+		loadingBackpacks.values().forEach(future -> future.cancel(false));
+		loadingBackpacks.clear();
+		// A normal save marks the backpack clean as soon as an async write is queued. During
+		// shutdown/reload that queued write may not have reached storage yet, so always force one
+		// final synchronous snapshot of every cached backpack before clearing the cache.
+		backpacks.forEach((key, value) -> {
+			value.setChanged();
+			value.closeAll();
+		});
 		backpacks.clear();
 		unCacheStrategy.close();
 	}
@@ -118,7 +129,10 @@ public abstract class Database implements Listener
 			database.init();
 			return database;
 		}
-		catch(IllegalStateException ignored) {}
+		catch(IllegalStateException e)
+		{
+			plugin.getLogger().log(Level.SEVERE, "Minepacks refused to initialize backpack storage because a safe serializer or database state is unavailable.", e);
+		}
 		catch(Exception e)
 		{
 			plugin.getLogger().log(Level.SEVERE, "Failed to initialize database.", e);
@@ -196,44 +210,108 @@ public abstract class Database implements Listener
 		return (player == null) ? null : backpacks.get(player.getUniqueId());
 	}
 
-	public void getBackpack(final OfflinePlayer player, final Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack> callback, final boolean createNewOnFail)
+	private @NotNull CompletableFuture<Backpack> getOrStartBackpackLoad(final @NotNull OfflinePlayer player)
 	{
-		if(player == null || player.getClass().getName().contains("NPC"))
-		{
-			return;
-		}
-		Backpack lbp = backpacks.get(player.getUniqueId());
-		if(lbp == null)
+		final UUID playerId = player.getUniqueId();
+		final Backpack cached = backpacks.get(playerId);
+		if(cached != null) return CompletableFuture.completedFuture(cached);
+
+		final CompletableFuture<Backpack> newLoad = new CompletableFuture<>();
+		final CompletableFuture<Backpack> existingLoad = loadingBackpacks.putIfAbsent(playerId, newLoad);
+		if(existingLoad != null) return existingLoad;
+
+		try
 		{
 			loadBackpack(player, new Callback<Backpack>()
 			{
 				@Override
 				public void onResult(Backpack backpack)
 				{
-					backpacks.put(player.getUniqueId(), backpack);
-					callback.onResult(backpack);
+					if(loadingBackpacks.remove(playerId, newLoad))
+					{
+						Backpack alreadyCached = backpacks.putIfAbsent(playerId, backpack);
+						newLoad.complete((alreadyCached == null) ? backpack : alreadyCached);
+					}
 				}
 
 				@Override
 				public void onFail()
 				{
-					if(createNewOnFail)
-					{
-						Backpack backpack = new Backpack(player);
-						backpacks.put(player.getUniqueId(), backpack);
-						callback.onResult(backpack);
-					}
-					else
-					{
-						callback.onFail();
-					}
+					if(loadingBackpacks.remove(playerId, newLoad)) newLoad.complete(null);
 				}
 			});
 		}
-		else
+		catch(Exception e)
 		{
-			callback.onResult(lbp);
+			loadingBackpacks.remove(playerId, newLoad);
+			newLoad.completeExceptionally(e);
 		}
+		return newLoad;
+	}
+
+	private void dispatchBackpackCallback(@NotNull OfflinePlayer owner, @NotNull Runnable callback)
+	{
+		if(Minepacks.isFoliaServer())
+		{
+			Player onlineOwner = owner.getPlayer();
+			if(onlineOwner != null)
+			{
+				Minepacks.getScheduler().runAtEntity(onlineOwner, task -> callback.run());
+			}
+			else
+			{
+				// Offline backpacks have no entity scheduler. Use Folia's global scheduler for
+				// plugin/global work rather than inheriting an arbitrary async completion thread.
+				Minepacks.getScheduler().runNextTick(task -> callback.run());
+			}
+			return;
+		}
+		callback.run();
+	}
+
+	public void getBackpack(final OfflinePlayer player, final Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack> callback, final boolean createNewOnFail)
+	{
+		if(player == null || player.getClass().getName().contains("NPC"))
+		{
+			callback.onFail();
+			return;
+		}
+
+		final UUID playerId = player.getUniqueId();
+		getOrStartBackpackLoad(player).whenComplete((loadedBackpack, error) -> dispatchBackpackCallback(player, () -> {
+			if(error != null)
+			{
+				if(!(error instanceof java.util.concurrent.CancellationException))
+				{
+					plugin.getLogger().log(Level.SEVERE, "Failed to load backpack for " + playerId + ".", error);
+				}
+				callback.onFail();
+				return;
+			}
+			if(loadedBackpack != null)
+			{
+				callback.onResult(loadedBackpack);
+				return;
+			}
+			if(!createNewOnFail)
+			{
+				callback.onFail();
+				return;
+			}
+
+			try
+			{
+				// The callback is on the owner's entity scheduler on Folia when the owner is online.
+				// computeIfAbsent guarantees simultaneous first-time requests still share one object.
+				Backpack created = backpacks.computeIfAbsent(playerId, ignored -> new Backpack(player));
+				callback.onResult(created);
+			}
+			catch(Exception e)
+			{
+				plugin.getLogger().log(Level.SEVERE, "Failed to create backpack for " + playerId + ".", e);
+				callback.onFail();
+			}
+		}));
 	}
 
 	public void getBackpack(final OfflinePlayer player, final Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack> callback)
@@ -256,23 +334,15 @@ public abstract class Database implements Listener
 
 	public void asyncLoadBackpack(final OfflinePlayer player)
 	{
-		if(player != null && backpacks.get(player.getUniqueId()) == null)
+		if(player == null) return;
+		getBackpack(player, new Callback<at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack>()
 		{
-			loadBackpack(player, new Callback<Backpack>()
-			{
-				@Override
-				public void onResult(Backpack backpack)
-				{
-					backpacks.put(player.getUniqueId(), backpack);
-				}
+			@Override
+			public void onResult(at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack backpack) { /* preload only */ }
 
-				@Override
-				public void onFail()
-				{
-					backpacks.put(player.getUniqueId(), new Backpack(player));
-				}
-			});
-		}
+			@Override
+			public void onFail() { /* preload only */ }
+		}, true);
 	}
 
 	@EventHandler

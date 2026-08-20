@@ -31,6 +31,8 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,20 +90,20 @@ public class Files extends Database
 		if(allFiles == null) return;
 		for (File file : allFiles)
 		{
-			if(maxAge > 0 && System.currentTimeMillis() - file.lastModified() > maxAge) // Check if the file is older than x days
+			if(maxAge > 0 && System.currentTimeMillis() - file.lastModified() > maxAge)
 			{
 				if(!file.delete())
 				{
 					plugin.getLogger().warning("Failed to delete file (" + file.getAbsolutePath() + ").");
 				}
-				continue; // We don't have to check if the file name is correct because we have the deleted the file
+				continue;
 			}
 			int len = file.getName().length() - EXT.length();
-			if(len <= 16) // It's a player name
+			if(len <= 16)
 			{
 				tryRename(file, new File(saveFolder, getUuidFromFileName(file.getName()) + EXT));
 			}
-			else // It's a UUID
+			else
 			{
 				if(file.getName().contains("-"))
 				{
@@ -123,36 +125,70 @@ public class Files extends Database
 		return getPlayerFormattedUUID(uuid) + EXT;
 	}
 	
-	// DB Functions
 	@Override
 	public void saveBackpack(Backpack backpack)
 	{
+		final int usedSerializer = itsSerializer.getUsedSerializer();
+		final byte[] data = itsSerializer.serialize(backpack.getInventory());
+		final String ownerUUID = getPlayerFormattedUUID(backpack.getOwnerId());
 		File save = new File(saveFolder, getFileName(backpack.getOwnerId()));
-		try(FileOutputStream fos = new FileOutputStream(save))
+		File temp = new File(saveFolder, save.getName() + ".tmp");
+		try
 		{
-			fos.write(itsSerializer.getUsedSerializer());
-			fos.write(itsSerializer.serialize(backpack.getInventory()));
-			fos.flush();
+			try(FileOutputStream fos = new FileOutputStream(temp))
+			{
+				fos.write(usedSerializer);
+				fos.write(data);
+				fos.flush();
+				fos.getFD().sync();
+			}
+
+			try
+			{
+				java.nio.file.Files.move(temp.toPath(), save.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			}
+			catch(AtomicMoveNotSupportedException ignored)
+			{
+				java.nio.file.Files.move(temp.toPath(), save.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			}
 		}
 		catch(Exception e)
 		{
-			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack.", e);
+			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack. Preserving a recovery backup and marking it dirty for retry.", e);
+			writeBackup(backpack.getOwner().getName(), ownerUUID, usedSerializer, data);
+			// Backpack's dirty flag is atomic, so this remains safe even when the scheduler is
+			// already shutting down and guarantees a later save attempt can see the failure.
+			backpack.setChanged();
+			if(temp.exists() && !temp.delete())
+			{
+				plugin.getLogger().warning("Failed to remove temporary backpack file (" + temp.getAbsolutePath() + ").");
+			}
 		}
 	}
 
 	@Override
 	protected void loadBackpack(final OfflinePlayer player, final Callback<Backpack> callback)
-	{ //TODO this needs to be done async!
-		File save = new File(saveFolder, getFileName(player.getUniqueId()));
-		ItemStack[] itemStacks = readFile(itsSerializer, save, plugin.getLogger());
-		if(itemStacks != null)
-		{
-			callback.onResult(new Backpack(player, itemStacks, -1));
-		}
-		else
-		{
-			callback.onFail();
-		}
+	{
+		final File save = new File(saveFolder, getFileName(player.getUniqueId()));
+		Minepacks.getScheduler().runAsync(task -> {
+			final ItemStack[] itemStacks = readFile(itsSerializer, save, plugin.getLogger());
+			Minepacks.getScheduler().runNextTick(task1 -> {
+				if(itemStacks == null)
+				{
+					callback.onFail();
+					return;
+				}
+				try
+				{
+					callback.onResult(new Backpack(player, itemStacks, -1));
+				}
+				catch(Exception e)
+				{
+					plugin.getLogger().log(Level.SEVERE, "Failed to create loaded backpack inventory.", e);
+					callback.onFail();
+				}
+			});
+		});
 	}
 
 	protected static @Nullable ItemStack[] readFile(@NotNull InventorySerializer itsSerializer, @NotNull File file, @NotNull Logger logger)

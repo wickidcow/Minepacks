@@ -141,6 +141,6 @@ public interface Backpack extends InventoryHolder
 
 	static boolean isBackpack(@Nullable Inventory inventory)
 	{
-		return inventory instanceof Backpack;
+		return inventory != null && inventory.getHolder() instanceof Backpack;
 	}
 }

@@ -49,9 +49,38 @@ public class ClearCommand extends MinepacksCommand
 		messageClearedOther = plugin.getLanguage().getMessage("Ingame.Clean.BackpackCleanedOther").placeholders(Placeholders.PLAYER_NAME);
 	}
 
+	private void sendToSender(@NotNull CommandSender sender, @NotNull Runnable message)
+	{
+		if(Minepacks.isFoliaServer() && sender instanceof Player)
+		{
+			Minepacks.getScheduler().runAtEntity((Player) sender, task -> message.run());
+		}
+		else
+		{
+			message.run();
+		}
+	}
+
+	private void sendPreparedToSender(@NotNull CommandSender sender, @NotNull Message template, @NotNull Object parameter)
+	{
+		// This method is called while `parameter` is owned by the current region. Resolve live
+		// Player placeholders here, then move only immutable rendered text to the recipient region.
+		final boolean useJson = sender instanceof Player;
+		final String rendered = template.prepareMessage(useJson, parameter);
+		final at.pcgamingfreaks.Bukkit.Message.Sender.SendMethod sendMethod = template.getSendMethod();
+		sendToSender(sender, () -> new Message(rendered, sendMethod).send(sender));
+	}
+
 	@Override
 	public void execute(final @NotNull CommandSender commandSender, @NotNull String mainCommandAlias, @NotNull String alias, @NotNull String[] args)
 	{
+		// Commands issued by a player run on that player's entity context on Folia. Pre-render the
+		// sender placeholder before the asynchronous backpack lookup can move work to another region.
+		final String clearedByRendered = Minepacks.isFoliaServer() && commandSender instanceof Player
+				? messageClearedBy.prepareMessage(true, commandSender)
+				: null;
+		final at.pcgamingfreaks.Bukkit.Message.Sender.SendMethod clearedBySendMethod = messageClearedBy.getSendMethod();
+
 		OfflinePlayer target = null;
 		if(commandSender instanceof Player && args.length < 2)
 		{
@@ -71,32 +100,48 @@ public class ClearCommand extends MinepacksCommand
 						backpack.clear();
 						if(commandSender instanceof Player && ((Player) commandSender).getUniqueId().equals(backpack.getOwnerId()))
 						{
-							messageCleared.send(commandSender);
+							sendToSender(commandSender, () -> messageCleared.send(commandSender));
 						}
 						else
 						{
 							Player owner = backpack.getOwnerPlayer();
 							if(owner != null)
 							{
-								messageClearedOther.send(commandSender, owner);
-								messageClearedBy.send(owner, commandSender);
+								if(Minepacks.isFoliaServer())
+								{
+									sendPreparedToSender(commandSender, messageClearedOther, owner);
+									if(clearedByRendered != null)
+									{
+										new Message(clearedByRendered, clearedBySendMethod).send(owner);
+									}
+									else
+									{
+										messageClearedBy.send(owner, commandSender);
+									}
+								}
+								else
+								{
+									sendToSender(commandSender, () -> messageClearedOther.send(commandSender, owner));
+									messageClearedBy.send(owner, commandSender);
+								}
 							}
 							else
 							{
-								messageClearedOther.send(commandSender, backpack.getOwner());
+								OfflinePlayer offlineOwner = backpack.getOwner();
+								sendToSender(commandSender, () -> messageClearedOther.send(commandSender, offlineOwner));
 							}
 						}
 					}
 					else
 					{
-						((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender);
+						sendToSender(commandSender, () -> ((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender));
 					}
 				}
 
 				@Override
 				public void onFail()
 				{
-					((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender);
+					sendToSender(commandSender, () -> ((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender));
 				}
 			});
 		}

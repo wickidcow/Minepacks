@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 {
@@ -55,15 +56,16 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 	private final Map<Player, Boolean> opened = new ConcurrentHashMap<>(); //Thanks Minecraft 1.14
 	private Inventory bp;
 	@Getter private int size;
-	@Getter @Setter private int ownerDatabaseId;
-	private boolean hasChanged;
+	@Getter @Setter private volatile int ownerDatabaseId;
+	private final AtomicBoolean hasChanged = new AtomicBoolean(false);
 
 	public static void setTitle(final @NotNull String title, final @NotNull String titleOther)
 	{
-		titleOwnGlobal = title.contains("%s") ? null : InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(title);
 		titleFormat = title;
 		titleOtherFormat = titleOther;
 		useDynTitle = !title.equals(titleOther);
+		// Paper-family servers use the stable public inventory API instead of the NMS title path.
+		titleOwnGlobal = Minepacks.isPaperFamily() || title.contains("%s") ? null : InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(title);
 	}
 
 	public Backpack(OfflinePlayer owner)
@@ -89,7 +91,8 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 		this.size = size;
 		ownerDatabaseId = ID;
 
-		if (titleOwnGlobal != null) titleOwn = titleOwnGlobal;
+		if(Minepacks.isPaperFamily()) titleOwn = null;
+		else if (titleOwnGlobal != null) titleOwn = titleOwnGlobal;
 		else titleOwn = InventoryUtils.prepareTitleForOpenInventoryWithCustomTitle(String.format(titleFormat, owner.getName()));
 	}
 	
@@ -103,23 +106,18 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 			backpack = compressor.getTargetStacks();
 			if(!toMuch.isEmpty())
 			{
-				Minepacks.getInstance().getLogger().warning(owner.getName() + "'s backpack has to many items.");
-				if(owner.isOnline())
+				Minepacks.getInstance().getLogger().warning(owner.getName() + "'s backpack has too many items.");
+				Player player = owner.getPlayer();
+				if(player != null)
 				{
-					Minepacks.getScheduler().runNextTick(task -> {
-						if(owner.isOnline())
-						{
-							Player player = owner.getPlayer();
-							assert player != null;
-							Minepacks.getScheduler().runAtEntity(player, task1 -> {
-								Map<Integer, ItemStack> left = player.getInventory().addItem(toMuch.toArray(new ItemStack[0]));
-								left.forEach((id, stack) -> player.getWorld().dropItemNaturally(player.getLocation(), stack));
-								this.setChanged();
-							});
-						}
+					Minepacks.getScheduler().runAtEntity(player, task -> {
+						if(!player.isOnline()) return;
+						Map<Integer, ItemStack> left = player.getInventory().addItem(toMuch.toArray(new ItemStack[0]));
+						left.forEach((id, stack) -> player.getWorld().dropItemNaturally(player.getLocation(), stack));
+						this.setChanged();
 					});
 				}
-				else throw new RuntimeException("Backpack to big for MC 1.14 and up!");
+				else throw new RuntimeException("Backpack too big for MC 1.14 and up!");
 			}
 		}
 		bp.setContents(backpack);
@@ -141,52 +139,96 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 	public void checkResize()
 	{
 		Player owner = Bukkit.getServer().getPlayer(this.ownerId);
-		if(owner != null)
+		if(owner == null) return;
+		if(Minepacks.isFoliaServer())
 		{
-			if(owner.hasPermission(Permissions.USE))
+			Minepacks.getScheduler().runAtEntity(owner, task -> checkResizeForOwner(owner));
+		}
+		else
+		{
+			checkResizeForOwner(owner);
+		}
+	}
+
+	private void checkResizeForOwner(@NotNull Player owner)
+	{
+		if(!ownerId.equals(owner.getUniqueId()) || !owner.hasPermission(Permissions.USE)) return;
+		// Never resize a live Folia inventory. It may be owned by a different region thread.
+		if(Minepacks.isFoliaServer() && !opened.isEmpty()) return;
+		int newSize = Minepacks.getInstance().getBackpackPermSize(owner);
+		if(newSize != bp.getSize())
+		{
+			boolean dropped = false;
+			List<ItemStack> items = setSize(newSize);
+			for(ItemStack item : items)
 			{
-				int size = Minepacks.getInstance().getBackpackPermSize(owner);
-				if(size != bp.getSize())
+				if(item != null)
 				{
-					boolean dropped = false;
-					List<ItemStack> items = setSize(size);
-					for(ItemStack i : items)
-					{
-						if(i != null)
-						{
-							owner.getWorld().dropItemNaturally(owner.getLocation(), i);
-							dropped = true;
-						}
-					}
-					if (dropped)
-					{
-						messageBackpackShrunk.send(owner);
-					}
+					owner.getWorld().dropItemNaturally(owner.getLocation(), item);
+					dropped = true;
 				}
 			}
+			if(dropped) messageBackpackShrunk.send(owner);
 		}
 	}
 
 	@Override
 	public void open(final @NotNull Player player, final boolean editable)
 	{
-		checkResize();
-		opened.put(player, editable);
-		if(useDynTitle && ownerId.equals(player.getUniqueId())) InventoryUtils.openInventoryWithCustomTitlePrepared(player, bp, titleOwn);
-		else player.openInventory(bp);
+		open(player, editable, null);
 	}
 
 	@Override
 	public void open(final @NotNull Player player, final boolean editable, final @Nullable String title)
 	{
-		if(title == null)
+		if(Minepacks.isFoliaServer())
 		{
-			open(player, editable);
+			// A Bukkit Inventory must not be shared live across independent Folia regions. Keep
+			// the GUI owner-only; administrative data operations are handled without a shared view.
+			if(!ownerId.equals(player.getUniqueId()))
+			{
+				Minepacks.getScheduler().runAtEntity(player, task -> player.sendMessage("Opening another player's backpack is disabled on Folia for data safety."));
+				return;
+			}
+			Minepacks.getScheduler().runAtEntity(player, task -> {
+				if(!player.isOnline()) return;
+				checkResizeForOwner(player);
+				openPrepared(player, editable, title);
+			});
 			return;
 		}
+
 		checkResize();
+		openPrepared(player, editable, title);
+	}
+
+	private void openPrepared(@NotNull Player player, boolean editable, @Nullable String title)
+	{
+		if(Minepacks.isFoliaServer() && !opened.isEmpty() && !opened.containsKey(player))
+		{
+			player.sendMessage("This backpack is already open.");
+			return;
+		}
+
+		if(Minepacks.isPaperFamily())
+		{
+			// Paper/Purpur/Folia use the public API; the previous custom-title path depended on NMS.
+			player.openInventory(bp);
+		}
+		else if(title != null)
+		{
+			InventoryUtils.openInventoryWithCustomTitle(player, bp, title);
+		}
+		else if(useDynTitle && ownerId.equals(player.getUniqueId()))
+		{
+			InventoryUtils.openInventoryWithCustomTitlePrepared(player, bp, titleOwn);
+		}
+		else
+		{
+			player.openInventory(bp);
+		}
+		// Only track a viewer after the inventory open completed without throwing.
 		opened.put(player, editable);
-		InventoryUtils.openInventoryWithCustomTitle(player, bp, title);
 	}
 
 	public void close(Player p)
@@ -196,7 +238,12 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 
 	public void closeAll()
 	{
-		opened.forEach((key, value) -> key.closeInventory());
+		if(!Minepacks.isFoliaServer())
+		{
+			opened.forEach((key, value) -> key.closeInventory());
+		}
+		// During Folia shutdown the entity schedulers may already be unavailable. The server owns
+		// GUI teardown; Minepacks only needs to drop viewer references and persist the snapshot.
 		opened.clear();
 		save();
 	}
@@ -215,7 +262,11 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 
 	public @NotNull List<ItemStack> setSize(int newSize)
 	{
-		opened.forEach((key, value) -> key.closeInventory()); // Close all open views of the inventory
+		if(Minepacks.isFoliaServer() && !opened.isEmpty())
+		{
+			throw new IllegalStateException("Cannot resize an open backpack on Folia.");
+		}
+		if(!Minepacks.isFoliaServer()) opened.forEach((key, value) -> key.closeInventory()); // Close all open views of the inventory
 		List<ItemStack> removedItems;
 		ItemStack[] itemStackArray;
 		if(bp.getSize() > newSize)
@@ -235,7 +286,7 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 			itemStackArray = bp.getContents();
 			removedItems = new ArrayList<>(0);
 		}
-		bp = Bukkit.createInventory(bp.getHolder(), newSize, titleOther);
+		bp = Bukkit.createInventory(this, newSize, titleOther);
 		for(int i = 0; i < itemStackArray.length; i++)
 		{
 			bp.setItem(i, itemStackArray[i]);
@@ -243,7 +294,7 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 		setChanged();
 		save(); // Make sure the new inventory is saved
 		size = newSize;
-		opened.forEach((key, value) -> key.openInventory(bp));
+		if(!Minepacks.isFoliaServer()) opened.forEach((key, value) -> key.openInventory(bp));
 		return removedItems;
 	}
 
@@ -256,28 +307,29 @@ public class Backpack implements at.pcgamingfreaks.Minepacks.Bukkit.API.Backpack
 	@Override
 	public boolean hasChanged()
 	{
-		return hasChanged;
+		return hasChanged.get();
 	}
 
 	@Override
 	public void setChanged()
 	{
-		hasChanged = true;
+		hasChanged.set(true);
 	}
 
 	@Override
 	public void save()
 	{
-		if(hasChanged())
+		// Atomically claim the current dirty state. If another region marks the backpack dirty
+		// after this CAS, that newer change remains true and will be persisted by the next save.
+		if(hasChanged.compareAndSet(true, false))
 		{
 			Minepacks.getInstance().getDatabase().saveBackpack(this);
-			hasChanged = false;
 		}
 	}
 
 	public void forceSave()
 	{
-		hasChanged = true;
+		hasChanged.set(true);
 		save();
 	}
 
