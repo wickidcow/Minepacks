@@ -25,7 +25,11 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ItemsCollector extends CancellableRunnable {
 	private final Minepacks plugin;
@@ -54,7 +58,7 @@ public class ItemsCollector extends CancellableRunnable {
 
 		this.isToggleable = plugin.getConfiguration().isFullInvToggleAllowed();
 		this.enabledOnJoin = plugin.getConfiguration().isFullInvEnabledOnJoin();
-		this.toggleList = new HashSet<>();
+		this.toggleList = ConcurrentHashMap.newKeySet();
 		schedule();
 		itemFilter = plugin.getItemFilter();
 	}
