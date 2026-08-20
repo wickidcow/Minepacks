@@ -90,20 +90,20 @@ public class Files extends Database
 		if(allFiles == null) return;
 		for (File file : allFiles)
 		{
-			if(maxAge > 0 && System.currentTimeMillis() - file.lastModified() > maxAge) // Check if the file is older than x days
+			if(maxAge > 0 && System.currentTimeMillis() - file.lastModified() > maxAge)
 			{
 				if(!file.delete())
 				{
 					plugin.getLogger().warning("Failed to delete file (" + file.getAbsolutePath() + ").");
 				}
-				continue; // We don't have to check if the file name is correct because we have the deleted the file
+				continue;
 			}
 			int len = file.getName().length() - EXT.length();
-			if(len <= 16) // It's a player name
+			if(len <= 16)
 			{
 				tryRename(file, new File(saveFolder, getUuidFromFileName(file.getName()) + EXT));
 			}
-			else // It's a UUID
+			else
 			{
 				if(file.getName().contains("-"))
 				{
@@ -125,7 +125,6 @@ public class Files extends Database
 		return getPlayerFormattedUUID(uuid) + EXT;
 	}
 	
-	// DB Functions
 	@Override
 	public void saveBackpack(Backpack backpack)
 	{
@@ -157,7 +156,9 @@ public class Files extends Database
 		{
 			plugin.getLogger().log(Level.SEVERE, "Failed to save backpack. Preserving a recovery backup and marking it dirty for retry.", e);
 			writeBackup(backpack.getOwner().getName(), ownerUUID, usedSerializer, data);
-			Minepacks.getScheduler().runNextTick(task -> backpack.setChanged());
+			// Backpack's dirty flag is atomic, so this remains safe even when the scheduler is
+			// already shutting down and guarantees a later save attempt can see the failure.
+			backpack.setChanged();
 			if(temp.exists() && !temp.delete())
 			{
 				plugin.getLogger().warning("Failed to remove temporary backpack file (" + temp.getAbsolutePath() + ").");
@@ -169,8 +170,6 @@ public class Files extends Database
 	protected void loadBackpack(final OfflinePlayer player, final Callback<Backpack> callback)
 	{
 		final File save = new File(saveFolder, getFileName(player.getUniqueId()));
-		// File I/O and item deserialization can be relatively expensive and do not need Bukkit's
-		// server thread. Only the Bukkit inventory object itself is created back on that thread.
 		Minepacks.getScheduler().runAsync(task -> {
 			final ItemStack[] itemStacks = readFile(itsSerializer, save, plugin.getLogger());
 			Minepacks.getScheduler().runNextTick(task1 -> {
