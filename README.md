@@ -58,6 +58,12 @@ This fork preserves Minepacks' Bukkit/Spigot compatibility while using stable pu
 * Per-viewer custom backpack-title rewriting is not used on Paper-family servers; the normal backpack inventory title is used instead.
 * Plugins using the Minepacks API on Folia must access a live backpack `Inventory` from the backpack owner's entity thread. The API does not hide unsafe cross-region access by blocking between regions.
 
+## Production JAR in this fork
+
+The published GitHub release asset is one self-contained `Minepacks-<version>.jar`. It includes the required PCGF PluginLib runtime pieces internally, so server owners do not need to install PCGF PluginLib separately.
+
+The older BadRabbit runtime selector is not used by the production JAR. Direct self-contained startup is used instead because it is simpler, avoids constructing a second `JavaPlugin` implementation at runtime, and is the path validated by the Paper/Purpur/Folia server smoke workflow.
+
 ## Features:
 * [Configuration][config]
 * Backpack size controlled by [permissions][wikiPermissions]
@@ -72,9 +78,9 @@ This fork preserves Minepacks' Bukkit/Spigot compatibility while using stable pu
 
 ## Requirements:
 ### Runtime requirements:
-* Use the Java version required by your Minecraft server. The project keeps Java 8 source compatibility for legacy Bukkit/Spigot while modern 26.2 release packaging is validated on Java 25.
+* Use the Java version required by your Minecraft server. The project keeps Java 8 source compatibility for legacy Bukkit/Spigot while modern 26.2 production packaging is validated on Java 25.
 * Bukkit or Spigot for legacy supported Minecraft versions, or Paper/Purpur/Folia through the explicitly validated modern version range ![versionsImg]
-* (Optional) [PCGF PluginLib][pcgfPluginLib] ([Advantages of using the PCGF PluginLib][pcgfPluginLibAdvantages])
+* The production JAR is self-contained. A separately installed PCGF PluginLib is not required.
 
 ### Build requirements:
 
@@ -83,10 +89,9 @@ This fork preserves Minepacks' Bukkit/Spigot compatibility while using stable pu
 * git
 
 ## Build from source:
-The plugin can be build in 3 different configurations.  
-All the details about the different build configs and runtime modes can be found [here](https://github.com/GeorgH93/Minepacks/wiki/Build-and-Mode-comparison).
 
-### Normal version:
+### Normal/development version:
+This build expects PCGF PluginLib to be installed on the server.
 ```
 git clone https://github.com/GeorgH93/Minepacks.git
 cd Minepacks
@@ -94,24 +99,17 @@ mvn package
 ```
 The final file will be in the `Minepacks/target` folder, named `Minepacks-<CurrentVersion>.jar`.
 
-### Standalone version:
-This version works without the PCGF-PluginLib, however some API features are not available.
+### Self-contained production version:
+This is the recommended build for Paper, Purpur, Folia, and normal standalone server use. It does not require a separate PCGF PluginLib installation.
 ```
 git clone https://github.com/GeorgH93/Minepacks.git
 cd Minepacks
-mvn package -P Standalone
+mvn clean package -P Standalone
 ```
-The final file will be in the `Minepacks/target` folder, named `Minepacks-<CurrentVersion>-Standalone.jar`.
+The self-contained file will be in the `Minepacks/target` folder, named `Minepacks-<CurrentVersion>-Standalone.jar`. GitHub releases from this fork publish that same validated build as `Minepacks-<CurrentVersion>.jar`.
 
-### Release version:
-This is the version of the plugin published on dev.bukkit.org and spigotmc.org.
-```
-git clone https://github.com/GeorgH93/Minepacks.git
-cd Minepacks
-mvn clean install -P Standalone
-mvn clean package -P Release
-```
-The final file will be in the `Minepacks/target` folder, named `Minepacks-<CurrentVersion>-Release.jar`.
+### Legacy Release profile:
+The upstream `Release` Maven profile is retained for source compatibility with the original project, but it uses the legacy BadRabbit runtime selector and is not the production artifact published by this fork.
 
 ## API:
 Minepacks V2 comes with an API that allows you to interact with this plugin.
