@@ -92,7 +92,7 @@ jobs:
             -o "$RUNNER_TEMP/servers/purpur.jar"
 
           if ! download_fill_build folia beta "$RUNNER_TEMP/servers/folia.jar"; then
-            echo 'Folia 26.2 build unavailable; Folia smoke will be reported as experimental/skipped.'
+            echo 'Folia 26.2 build unavailable; Folia smoke will be skipped for this run.'
             rm -f "$RUNNER_TEMP/servers/folia.jar"
           fi
 
@@ -120,22 +120,19 @@ jobs:
             "$RUNNER_TEMP/smoke-purpur" \
             "$EXPECTED_LOG"
 
-      - name: Boot Folia and verify Minepacks (experimental 26.2)
+      - name: Boot Folia and verify Minepacks
         shell: bash
         env:
           EXPECTED_LOG: 'Folia compatibility enabled with entity-aware scheduling.'
         run: |
-          set -u
+          set -euo pipefail
           if [ ! -f "$RUNNER_TEMP/servers/folia.jar" ]; then
-            echo '::warning::Folia 26.2 build was unavailable from PaperMC Fill; experimental smoke skipped.'
+            echo '::warning::Folia 26.2 build was unavailable from PaperMC Fill; smoke skipped.'
             exit 0
           fi
 
-          if ! bash .github/workflows/smoke-server.sh \
+          bash .github/workflows/smoke-server.sh \
             "$RUNNER_TEMP/servers/folia.jar" \
             "$RUNNER_TEMP/Minepacks-Production.jar" \
             "$RUNNER_TEMP/smoke-folia" \
-            "$EXPECTED_LOG"; then
-            echo '::warning::Folia 26.2 is an experimental/beta runtime; startup smoke failed. Review the compact Folia diagnostic above.'
-            exit 0
-          fi
+            "$EXPECTED_LOG"
