@@ -30,29 +30,26 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: Build Minepacks runtime JARs
+      - name: Build Minepacks production JAR
         shell: bash
         run: |
           set -euo pipefail
           MAVEN_LOG="$RUNNER_TEMP/minepacks-smoke-maven.log"
-          if ! mvn -q --no-transfer-progress -B -s .github/workflows/settings.xml clean install -P Standalone --file pom.xml >"$MAVEN_LOG" 2>&1; then
-            echo 'Minepacks Standalone build failed.' >&2
+          if ! mvn -q --no-transfer-progress -B -s .github/workflows/settings.xml clean package -P Standalone --file pom.xml >"$MAVEN_LOG" 2>&1; then
+            echo 'Minepacks production build failed.' >&2
             tail -n 120 "$MAVEN_LOG" >&2
             exit 1
           fi
-          STANDALONE_JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
-          test -n "$STANDALONE_JAR"
-          cp "$STANDALONE_JAR" "$RUNNER_TEMP/Minepacks-Standalone.jar"
-
-          if ! mvn -q --no-transfer-progress -B -s .github/workflows/settings.xml clean package -P Release --file pom.xml >>"$MAVEN_LOG" 2>&1; then
-            echo 'Minepacks Release build failed.' >&2
-            tail -n 120 "$MAVEN_LOG" >&2
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
+          test -n "$JAR"
+          cp "$JAR" "$RUNNER_TEMP/Minepacks-Production.jar"
+          unzip -p "$RUNNER_TEMP/Minepacks-Production.jar" plugin.yml | grep -q '^folia-supported: true$'
+          unzip -p "$RUNNER_TEMP/Minepacks-Production.jar" plugin.yml | grep -q '^main: "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"$'
+          if unzip -l "$RUNNER_TEMP/Minepacks-Production.jar" | grep -q 'MinepacksBadRabbit.class'; then
+            echo 'BadRabbit must not be present in the production JAR.' >&2
             exit 1
           fi
-          RELEASE_JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Release.jar' -print -quit)"
-          test -n "$RELEASE_JAR"
-          cp "$RELEASE_JAR" "$RUNNER_TEMP/Minepacks-Release.jar"
-          echo "Built $(basename "$STANDALONE_JAR") and $(basename "$RELEASE_JAR") for server smoke testing."
+          echo "Built $(basename "$JAR") as the production server JAR."
 
       - name: Download Paper, Purpur, and Folia 26.2
         shell: bash
@@ -94,14 +91,12 @@ jobs:
             "https://api.purpurmc.org/v2/purpur/${MINECRAFT_VERSION}/latest/download" \
             -o "$RUNNER_TEMP/servers/purpur.jar"
 
-          # Folia 26.2 may be published on the beta channel. Download it for compatibility
-          # coverage, but its startup result is handled as experimental below.
           if ! download_fill_build folia beta "$RUNNER_TEMP/servers/folia.jar"; then
             echo 'Folia 26.2 build unavailable; Folia smoke will be reported as experimental/skipped.'
             rm -f "$RUNNER_TEMP/servers/folia.jar"
           fi
 
-      - name: Boot Paper with direct Standalone JAR
+      - name: Boot Paper and verify Minepacks
         shell: bash
         env:
           EXPECTED_LOG: 'Paper compatibility enabled using the stable Bukkit plugin loading path.'
@@ -109,52 +104,37 @@ jobs:
           set -euo pipefail
           bash .github/workflows/smoke-server.sh \
             "$RUNNER_TEMP/servers/paper.jar" \
-            "$RUNNER_TEMP/Minepacks-Standalone.jar" \
-            "$RUNNER_TEMP/smoke-paper-standalone" \
-            "$EXPECTED_LOG"
-
-      - name: Boot Paper and verify Release JAR
-        shell: bash
-        env:
-          SERVER_TYPE: paper
-          EXPECTED_LOG: 'Paper compatibility enabled using the stable Bukkit plugin loading path.'
-        run: |
-          set -euo pipefail
-          bash .github/workflows/smoke-server.sh \
-            "$RUNNER_TEMP/servers/${SERVER_TYPE}.jar" \
-            "$RUNNER_TEMP/Minepacks-Release.jar" \
-            "$RUNNER_TEMP/smoke-${SERVER_TYPE}-release" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-paper" \
             "$EXPECTED_LOG"
 
       - name: Boot Purpur and verify Minepacks
         shell: bash
         env:
-          SERVER_TYPE: purpur
           EXPECTED_LOG: 'Purpur compatibility enabled using the stable Paper/Bukkit API path.'
         run: |
           set -euo pipefail
           bash .github/workflows/smoke-server.sh \
-            "$RUNNER_TEMP/servers/${SERVER_TYPE}.jar" \
-            "$RUNNER_TEMP/Minepacks-Release.jar" \
-            "$RUNNER_TEMP/smoke-${SERVER_TYPE}" \
+            "$RUNNER_TEMP/servers/purpur.jar" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-purpur" \
             "$EXPECTED_LOG"
 
       - name: Boot Folia and verify Minepacks (experimental 26.2)
         shell: bash
         env:
-          SERVER_TYPE: folia
           EXPECTED_LOG: 'Folia compatibility enabled with entity-aware scheduling.'
         run: |
           set -u
-          if [ ! -f "$RUNNER_TEMP/servers/${SERVER_TYPE}.jar" ]; then
+          if [ ! -f "$RUNNER_TEMP/servers/folia.jar" ]; then
             echo '::warning::Folia 26.2 build was unavailable from PaperMC Fill; experimental smoke skipped.'
             exit 0
           fi
 
           if ! bash .github/workflows/smoke-server.sh \
-            "$RUNNER_TEMP/servers/${SERVER_TYPE}.jar" \
-            "$RUNNER_TEMP/Minepacks-Release.jar" \
-            "$RUNNER_TEMP/smoke-${SERVER_TYPE}" \
+            "$RUNNER_TEMP/servers/folia.jar" \
+            "$RUNNER_TEMP/Minepacks-Production.jar" \
+            "$RUNNER_TEMP/smoke-folia" \
             "$EXPECTED_LOG"; then
             echo '::warning::Folia 26.2 is an experimental/beta runtime; startup smoke failed. Review the compact Folia diagnostic above.'
             exit 0
