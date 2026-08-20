@@ -42,6 +42,11 @@ public class ReloadCommand extends MinepacksCommand
 	@Override
 	public void execute(@NotNull CommandSender sender, @NotNull String mainCommandAlias, @NotNull String alias, @NotNull String[] args)
 	{
+		if(Minepacks.isFoliaServer())
+		{
+			sender.sendMessage("Minepacks live reload is disabled on Folia for thread and data safety. Restart the server to reload Minepacks.");
+			return;
+		}
 		messageReloading.send(sender);
 		((Minepacks) plugin).reload();
 		messageReloaded.send(sender);
