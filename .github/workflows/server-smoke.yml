@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -131,4 +132,42 @@ jobs:
             "$EXPECTED_LOG"; then
             echo '::warning::Folia 26.2 is an experimental/beta runtime; startup smoke failed. Review the Folia log before release.'
             exit 0
+          fi
+
+      - name: Publish smoke failure diagnostic
+        if: ${{ failure() && github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- minepacks-server-smoke -->'
+          REPORT="$RUNNER_TEMP/server-smoke-diagnostic.md"
+          {
+            echo "$MARKER"
+            echo '### Server Smoke diagnostic'
+            echo
+            echo "Commit: \`${GITHUB_SHA}\`"
+            echo
+            for platform in paper purpur folia; do
+              log="$RUNNER_TEMP/smoke-${platform}/server.log"
+              if [ -f "$log" ]; then
+                echo "#### ${platform^}"
+                echo '```text'
+                grep -E -i 'Minepacks|ERROR|WARN|Exception|Caused by|Could not load|failed|unsupported|Done \(' "$log" | tail -n 120 || tail -n 120 "$log" || true
+                echo '```'
+                echo
+              fi
+            done
+          } > "$REPORT"
+
+          REPO="$GITHUB_REPOSITORY"
+          COMMENT_ID="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- minepacks-server-smoke -->")) | .id' | head -n 1)"
+          jq -Rs '{body: .}' < "$REPORT" > "$RUNNER_TEMP/comment.json"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" --input "$RUNNER_TEMP/comment.json" >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" --input "$RUNNER_TEMP/comment.json" >/dev/null
           fi
