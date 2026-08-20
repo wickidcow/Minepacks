@@ -63,6 +63,7 @@ import java.io.File;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 {
@@ -89,6 +90,21 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 	private ItemShortcut shortcut = null;
 	@Getter private PlaceholderManager placeholderManager = null;
 
+	public static boolean isFoliaServer()
+	{
+		return ServerType.isFolia();
+	}
+
+	public static boolean isPurpurServer()
+	{
+		return Bukkit.getName().toLowerCase(Locale.ROOT).contains("purpur");
+	}
+
+	public static boolean isPaperFamily()
+	{
+		return ServerType.isPaperCompatible() || isPurpurServer() || isFoliaServer();
+	}
+
 	@Override
 	public boolean isRunningInStandaloneMode()
 	{
@@ -106,7 +122,7 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 
 		if(!checkPCGF_PluginLib()) return;
 
-		if (MCVersion.isNewerOrEqualThan(MCVersion.MC_1_19_3) && ServerType.isPaperCompatible())
+		if (MCVersion.isNewerOrEqualThan(MCVersion.MC_1_19_3) && isPaperFamily())
 		{
 			PermissionLoader.loadPermissionsFromPlugin(this);
 		}
@@ -123,7 +139,15 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		lang = new Language(this);
 		load();
 
-		if(ServerType.isPaperCompatible())
+		if(isFoliaServer())
+		{
+			getLogger().info("Folia compatibility enabled with entity-aware scheduling.");
+		}
+		else if(isPurpurServer())
+		{
+			getLogger().info("Purpur compatibility enabled using the stable Paper/Bukkit API path.");
+		}
+		else if(ServerType.isPaperCompatible())
 		{
 			getLogger().info("Paper compatibility enabled using the stable Bukkit plugin loading path.");
 		}
@@ -236,7 +260,8 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 		if(config.isWorldWhitelistMode()) pluginManager.registerEvents(new WorldBlacklistUpdater(this), this);
 		//endregion
 		if(config.getFullInvCollect() || config.isFullInvToggleAllowed()) collector = new ItemsCollector(this);
-		worldBlacklist = config.getWorldBlacklist();
+		worldBlacklist = ConcurrentHashMap.newKeySet();
+		worldBlacklist.addAll(config.getWorldBlacklist());
 		worldBlacklistMode = (worldBlacklist.isEmpty()) ? WorldBlacklistMode.None : config.getWorldBlockMode();
 
 		gameModes = config.getAllowedGameModes();
@@ -269,6 +294,11 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 
 	public void reload()
 	{
+		if(isFoliaServer())
+		{
+			getLogger().warning("Live reload is disabled on Folia. Restart the server to reload Minepacks safely.");
+			return;
+		}
 		unload();
 		config.reload();
 		load();
@@ -308,12 +338,18 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 	@Override
 	public void openBackpack(@NotNull Player opener, @NotNull OfflinePlayer owner, boolean editable, @Nullable String title)
 	{
-		database.getBackpack(owner, backpack -> openBackpack(opener, backpack, editable, title));
+		database.getBackpack(owner, backpack -> getScheduler().runAtEntity(opener, task -> openBackpackNow(opener, backpack, editable, title)));
 	}
 
 	@Override
 	public void openBackpack(@NotNull Player opener, @Nullable Backpack backpack, boolean editable, @Nullable String title)
 	{
+		getScheduler().runAtEntity(opener, task -> openBackpackNow(opener, backpack, editable, title));
+	}
+
+	private void openBackpackNow(@NotNull Player opener, @Nullable Backpack backpack, boolean editable, @Nullable String title)
+	{
+		if(!opener.isOnline()) return;
 		WorldBlacklistMode disabled = isDisabled(opener);
 		if(disabled != WorldBlacklistMode.None)
 		{
