@@ -43,3 +43,13 @@ jobs:
         run: mvn -B -s .github/workflows/settings.xml clean install -P Standalone --file pom.xml
       - name: Build release package
         run: mvn -B -s .github/workflows/settings.xml clean package -P Release --file pom.xml
+      - name: Validate packaged server metadata
+        shell: bash
+        run: |
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Release.jar' -print -quit)"
+          test -n "$JAR"
+          unzip -p "$JAR" plugin.yml | grep -q '^folia-supported: true$'
+          if unzip -l "$JAR" | grep -q 'paper-plugin.yml'; then
+            echo 'Experimental paper-plugin.yml must not be present in the release JAR.' >&2
+            exit 1
+          fi
