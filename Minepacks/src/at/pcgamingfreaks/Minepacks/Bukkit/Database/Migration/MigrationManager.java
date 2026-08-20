@@ -36,6 +36,12 @@ public class MigrationManager
 
 	public void migrateDB(final String targetDatabaseType, final MigrationCallback callback)
 	{
+		if(Minepacks.isFoliaServer())
+		{
+			callback.onResult(new MigrationResult("Live database migration is disabled on Folia for thread and data safety. Stop the server and migrate from a non-Folia maintenance instance or change storage offline.", MigrationResult.MigrationResultType.ERROR));
+			return;
+		}
+
 		final Migration migration = getMigrationPerformer(targetDatabaseType);
 		if(migration == null)
 		{
