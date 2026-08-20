@@ -28,6 +28,9 @@ import at.pcgamingfreaks.Minepacks.Bukkit.Permissions;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Powerable;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -91,6 +94,54 @@ public class ItemShortcut extends MinepacksListener
 		return itemDisplayName != null && itemNameNoReset.equals(itemDisplayName.replace(ChatColor.RESET.toString(), ""));
 	}
 
+	private boolean containsNestedShortcut(final @Nullable ItemStack stack)
+	{
+		if(stack == null || !stack.hasItemMeta()) return false;
+		try
+		{
+			Object items = stack.getItemMeta().getClass().getMethod("getItems").invoke(stack.getItemMeta());
+			if(items instanceof Iterable)
+			{
+				for(Object item : (Iterable<?>) items)
+				{
+					if(item instanceof ItemStack && isItemShortcut((ItemStack) item)) return true;
+				}
+			}
+		}
+		catch(ReflectiveOperationException | SecurityException ignored)
+		{
+			// Older Bukkit APIs and non-container item meta do not expose nested item contents.
+		}
+		return false;
+	}
+
+	private boolean poweredShelfSwapWouldMoveShortcut(@NotNull Player player, @NotNull Block block)
+	{
+		if(!block.getType().name().endsWith("_SHELF")) return false;
+		BlockData blockData = block.getBlockData();
+		if(!(blockData instanceof Powerable) || !((Powerable) blockData).isPowered()) return false;
+
+		// One powered shelf swaps the three rightmost hotbar slots. Connected shelves can swap
+		// six or all nine slots. SideChaining is newer than Minepacks' legacy API baseline, so
+		// inspect it reflectively and fail closed for connected/unknown powered shelf layouts.
+		int firstHotbarSlot = 6;
+		try
+		{
+			Object chainPart = blockData.getClass().getMethod("getSideChain").invoke(blockData);
+			if(chainPart == null || !"UNCONNECTED".equals(chainPart.toString())) firstHotbarSlot = 0;
+		}
+		catch(ReflectiveOperationException | SecurityException ignored)
+		{
+			firstHotbarSlot = 0;
+		}
+
+		for(int slot = firstHotbarSlot; slot < 9; slot++)
+		{
+			if(isItemShortcut(player.getInventory().getItem(slot))) return true;
+		}
+		return false;
+	}
+
 	public void addItem(Player player)
 	{
 		if(player.hasPermission(Permissions.USE))
@@ -99,10 +150,10 @@ public class ItemShortcut extends MinepacksListener
 			for(ItemStack itemStack : player.getInventory())
 			{
 				if(itemStack == null || itemStack.getType() == Material.AIR) empty = true;
-				else if(isItemShortcut(itemStack))
+				else if(isItemShortcut(itemStack) || containsNestedShortcut(itemStack))
 				{
 					item = true;
-					if(itemStack.getAmount() > 1) itemStack.setAmount(1);
+					if(isItemShortcut(itemStack) && itemStack.getAmount() > 1) itemStack.setAmount(1);
 					break;
 				}
 			}
@@ -187,6 +238,12 @@ public class ItemShortcut extends MinepacksListener
 	public void onItemInteract(PlayerInteractEvent event)
 	{
 		if ((event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) return;
+		if(event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null && poweredShelfSwapWouldMoveShortcut(event.getPlayer(), event.getClickedBlock()))
+		{
+			event.setCancelled(true);
+			messageDoNotRemoveItem.send(event.getPlayer());
+			return;
+		}
 		if(isItemShortcut(event.getItem()))
 		{
 			if(allowRightClickOnContainers && event.getAction() == Action.RIGHT_CLICK_BLOCK)
@@ -247,6 +304,13 @@ public class ItemShortcut extends MinepacksListener
 		if(event.getWhoClicked() instanceof Player)
 		{
 			final Player player = (Player) event.getWhoClicked();
+			final String actionName = event.getAction().name();
+			if(actionName.contains("BUNDLE") && (isItemShortcut(event.getCurrentItem()) || isItemShortcut(event.getCursor())))
+			{
+				event.setCancelled(true);
+				messageDoNotRemoveItem.send(player);
+				return;
+			}
 			if(isItemShortcut(event.getCurrentItem()))
 			{
 				if(event.getAction() == InventoryAction.SWAP_WITH_CURSOR)
