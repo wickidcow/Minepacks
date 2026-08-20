@@ -64,6 +64,12 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 
 	private void clearInventory(Player player, CommandSender sender)
 	{
+		Minepacks.getScheduler().runAtEntity(player, task -> clearInventoryNow(player, sender));
+	}
+
+	private void clearInventoryNow(Player player, CommandSender sender)
+	{
+		if(!player.isOnline()) return;
 		InventoryClearEvent clearEvent = new InventoryClearEvent(player, sender);
 		Bukkit.getPluginManager().callEvent(clearEvent);
 		if(clearEvent.isCancelled()) return;
@@ -75,7 +81,15 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 		else
 		{
 			messageInventoryWasCleared.send(player, sender);
-			messageOtherInventoryCleared.send(sender, player);
+			if(sender instanceof Player)
+			{
+				Player senderPlayer = (Player) sender;
+				Minepacks.getScheduler().runAtEntity(senderPlayer, task -> messageOtherInventoryCleared.send(senderPlayer, player));
+			}
+			else
+			{
+				messageOtherInventoryCleared.send(sender, player);
+			}
 		}
 		Bukkit.getPluginManager().callEvent(new InventoryClearedEvent(player, sender));
 	}
