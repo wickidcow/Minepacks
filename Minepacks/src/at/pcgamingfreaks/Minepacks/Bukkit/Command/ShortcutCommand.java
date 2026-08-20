@@ -46,12 +46,18 @@ public class ShortcutCommand extends MinepacksCommand
 	{
 		if (args.length == 1 && sender.hasPermission(Permissions.OTHERS))
 		{
-			Player p = Bukkit.getPlayer(args[0]);
-			if (p != null && p.hasPermission(Permissions.USE)) itemShortcut.addItem(p);
+			Player target = Bukkit.getPlayer(args[0]);
+			if(target != null)
+			{
+				Minepacks.getScheduler().runAtEntity(target, task -> {
+					if(target.isOnline() && target.hasPermission(Permissions.USE)) itemShortcut.addItem(target);
+				});
+			}
 		}
 		else
 		{
-			itemShortcut.addItem((Player) sender);
+			Player player = (Player) sender;
+			Minepacks.getScheduler().runAtEntity(player, task -> itemShortcut.addItem(player));
 		}
 	}
 
