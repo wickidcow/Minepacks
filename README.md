@@ -10,28 +10,28 @@
 [wiki]: https://github.com/GeorgH93/Minepacks/wiki
 [wikiFAQ]: https://github.com/GeorgH93/Minepacks/wiki/FAQ
 [wikiPermissions]: https://github.com/GeorgH93/Minepacks/wiki/Permissions
-[release]: https://github.com/GeorgH93/Minepacks/releases/latest
-[releaseImg]: https://img.shields.io/github/release/GeorgH93/Minepacks.svg?label=github%20release
-[license]: https://github.com/GeorgH93/Minepacks/blob/master/LICENSE
-[licenseImg]: https://img.shields.io/github/license/GeorgH93/Minepacks.svg
-[ci]: https://ci.pcgamingfreaks.at/job/Minepacks/
-[ciImg]: https://ci.pcgamingfreaks.at/job/Minepacks/badge/icon
-[ciDev]: https://ci.pcgamingfreaks.at/job/Minepacks%20Dev/
-[ciDevImg]: https://ci.pcgamingfreaks.at/job/Minepacks%20Dev/badge/icon
+[release]: https://github.com/wickidcow/Minepacks/releases/latest
+[releaseImg]: https://img.shields.io/github/release/wickidcow/Minepacks.svg?label=github%20release
+[license]: https://github.com/wickidcow/Minepacks/blob/master/LICENSE
+[licenseImg]: https://img.shields.io/github/license/wickidcow/Minepacks.svg
+[ci]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml
+[ciImg]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml/badge.svg
+[ciDev]: https://github.com/wickidcow/Minepacks/actions/workflows/server-smoke.yml
+[ciDevImg]: https://github.com/wickidcow/Minepacks/actions/workflows/server-smoke.yml/badge.svg
 [apiVersionImg]: https://img.shields.io/badge/dynamic/xml.svg?label=api-version&query=%2F%2Frelease[1]&url=https%3A%2F%2Frepo.pcgamingfreaks.at%2Frepository%2Fmaven-releases%2Fat%2Fpcgamingfreaks%2FMinepacks-API%2Fmaven-metadata.xml
-[api]: https://github.com/GeorgH93/Minepacks/tree/master/Minepacks-API
+[api]: https://github.com/wickidcow/Minepacks/tree/master/Minepacks-API
 [apiJavaDoc]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/javadoc/
-[apiBuilds]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/
+[apiBuilds]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml
 [bugReports]: https://github.com/GeorgH93/Minepacks/issues?q=is%3Aissue+is%3Aopen+label%3Abug
-[bugReportsImg]: https://img.shields.io/github/issues/GeorgH93/Minepacks/bug.svg?label=bug%20reports
+[bugReportsImg]: https://img.shields.io/github/issues/GeorgH93/Minepacks/bug.svg?label=upstream%20bug%20reports
 [reportBug]: https://github.com/GeorgH93/Minepacks/issues/new?labels=bug&template=bug.md
 [featureRequests]: https://github.com/GeorgH93/Minepacks/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement
-[featureRequestsImg]: https://img.shields.io/github/issues/GeorgH93/Minepacks/enhancement.svg?label=feature%20requests&color=informational
+[featureRequestsImg]: https://img.shields.io/github/issues/GeorgH93/Minepacks/enhancement.svg?label=upstream%20feature%20requests&color=informational
 [requestFeature]: https://github.com/GeorgH93/Minepacks/issues/new?labels=enhancement&template=enhancement.md
-[config]: https://github.com/GeorgH93/Minepacks/blob/master/Minepacks/resources/config.yml
+[config]: https://github.com/wickidcow/Minepacks/blob/master/Minepacks/resources/config.yml
 [pcgfPluginLib]: https://github.com/GeorgH93/PCGF_PluginLib
 [pcgfPluginLibAdvantages]: https://github.com/GeorgH93/Minepacks/wiki/Build-and-Mode-comparison#Advantages-of-using-the-PCGF-PluginLib
-[languages]: https://github.com/GeorgH93/Minepacks/tree/master/Minepacks/resources/lang
+[languages]: https://github.com/wickidcow/Minepacks/tree/master/Minepacks/resources/lang
 <!-- End of variables block -->
 
 [![Logo][banner]][spigot]
@@ -93,7 +93,7 @@ The older BadRabbit runtime selector is not used by the production JAR. Direct s
 ### Normal/development version:
 This build expects PCGF PluginLib to be installed on the server.
 ```
-git clone https://github.com/GeorgH93/Minepacks.git
+git clone https://github.com/wickidcow/Minepacks.git
 cd Minepacks
 mvn package
 ```
@@ -102,7 +102,7 @@ The final file will be in the `Minepacks/target` folder, named `Minepacks-<Curre
 ### Self-contained production version:
 This is the recommended build for Paper, Purpur, Folia, and normal standalone server use. It does not require a separate PCGF PluginLib installation.
 ```
-git clone https://github.com/GeorgH93/Minepacks.git
+git clone https://github.com/wickidcow/Minepacks.git
 cd Minepacks
 mvn clean package -P Standalone
 ```
@@ -117,17 +117,17 @@ If you think there is something missing in the API feel free to open a [feature 
 Please do not access data of the plugin in any other way than through the provided API, the inner workings will change and I won't keep track of what you are using in your plugin.
 For more details about the API please check the following links:
 
-[Source Code & Details][api] ⚫ [JavaDoc][apiJavaDoc] ⚫ [Build Server][apiBuilds]
+[Source Code & Details][api] ⚫ [JavaDoc][apiJavaDoc] ⚫ [Build Workflow][apiBuilds]
 
 ## Support:
-* [Wiki][wiki]
-* [Issue tracker][issues]
+* [Upstream Wiki][wiki]
+* [Upstream issue tracker][issues]
   * [new feature request][requestFeature]
   * [new bug report][reportBug]
-* [Faq][wikiFAQ]
+* [FAQ][wikiFAQ]
 
 ## Links:
 * [Spigot][spigot] - [![spigotDownloadsImg]][spigot]
 * [CurseForge][bukkit] - [![bukkitDownloadsImg]][bukkit]
-* [Build Server - Release Builds ![ciImg]][ci]
-* [Build Server - Dev Builds ![ciDevImg]][ciDev]
+* [GitHub Build Workflow ![ciImg]][ci]
+* [Paper / Purpur / Folia Smoke ![ciDevImg]][ciDev]
