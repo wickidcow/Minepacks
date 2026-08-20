@@ -128,6 +128,10 @@ public class BackpackEventListener extends MinepacksListener
 	public void onPlayerLeaveEvent(PlayerQuitEvent event)
 	{
 		Backpack backpack = plugin.getDatabase().getBackpack(event.getPlayer());
-		if(backpack != null) backpack.save();
+		if(backpack != null)
+		{
+			backpack.close(event.getPlayer());
+			backpack.save();
+		}
 	}
 }
