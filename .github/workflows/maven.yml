@@ -1,4 +1,4 @@
-# This workflow builds the normal compatibility matrix and validates the final release package.
+# This workflow builds the compatibility matrix and validates the self-contained production JAR.
 
 name: Build
 
@@ -29,7 +29,7 @@ jobs:
       - name: Build and test with Maven
         run: mvn -B -s .github/workflows/settings.xml clean package --file pom.xml
 
-  releasePackage:
+  productionPackage:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,17 +39,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - name: Build standalone dependency
-        run: mvn -B -s .github/workflows/settings.xml clean install -P Standalone --file pom.xml
-      - name: Build release package
-        run: mvn -B -s .github/workflows/settings.xml clean package -P Release --file pom.xml
+      - name: Build self-contained production package
+        run: mvn -B -s .github/workflows/settings.xml clean package -P Standalone --file pom.xml
       - name: Validate packaged server metadata
         shell: bash
         run: |
-          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Release.jar' -print -quit)"
+          set -euo pipefail
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
           test -n "$JAR"
           unzip -p "$JAR" plugin.yml | grep -q '^folia-supported: true$'
+          unzip -p "$JAR" plugin.yml | grep -q '^main: "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"$'
           if unzip -l "$JAR" | grep -q 'paper-plugin.yml'; then
-            echo 'Experimental paper-plugin.yml must not be present in the release JAR.' >&2
+            echo 'Experimental paper-plugin.yml must not be present in the production JAR.' >&2
+            exit 1
+          fi
+          if unzip -l "$JAR" | grep -q 'MinepacksBadRabbit.class'; then
+            echo 'BadRabbit must not be present in the production JAR.' >&2
             exit 1
           fi
