@@ -19,6 +19,7 @@ package at.pcgamingfreaks.Minepacks.Bukkit.Command;
 
 import at.pcgamingfreaks.Bukkit.Command.RegisterablePluginCommand;
 import at.pcgamingfreaks.Bukkit.Message.Message;
+import at.pcgamingfreaks.Bukkit.Message.Sender.SendMethod;
 import at.pcgamingfreaks.Bukkit.Util.Utils;
 import at.pcgamingfreaks.Minepacks.Bukkit.API.Events.InventoryClearEvent;
 import at.pcgamingfreaks.Minepacks.Bukkit.API.Events.InventoryClearedEvent;
@@ -50,7 +51,6 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 		command.setExecutor(this);
 		command.setTabCompleter(this);
 
-		// Load messages
 		messageUnknownPlayer = plugin.getLanguage().getMessage("Ingame.InventoryClear.UnknownPlayer").placeholder("Name");
 		messageOwnInventoryCleared = plugin.getLanguage().getMessage("Ingame.InventoryClear.Cleared");
 		messageOtherInventoryCleared = plugin.getLanguage().getMessage("Ingame.InventoryClear.ClearedOther").placeholders(Placeholders.PLAYER_NAME);
@@ -64,10 +64,22 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 
 	private void clearInventory(Player player, CommandSender sender)
 	{
-		Minepacks.getScheduler().runAtEntity(player, task -> clearInventoryNow(player, sender));
+		final String renderedSenderMessage;
+		final SendMethod senderMessageMethod = messageInventoryWasCleared.getSendMethod();
+		if(Minepacks.isFoliaServer() && sender instanceof Player && sender != player)
+		{
+			// Command execution is on the sender's region. Resolve that live Player placeholder now,
+			// before moving the inventory mutation to the target player's region.
+			renderedSenderMessage = messageInventoryWasCleared.prepareMessage(true, sender);
+		}
+		else
+		{
+			renderedSenderMessage = null;
+		}
+		Minepacks.getScheduler().runAtEntity(player, task -> clearInventoryNow(player, sender, renderedSenderMessage, senderMessageMethod));
 	}
 
-	private void clearInventoryNow(Player player, CommandSender sender)
+	private void clearInventoryNow(Player player, CommandSender sender, @Nullable String renderedSenderMessage, SendMethod senderMessageMethod)
 	{
 		if(!player.isOnline()) return;
 		InventoryClearEvent clearEvent = new InventoryClearEvent(player, sender);
@@ -80,11 +92,32 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 		}
 		else
 		{
-			messageInventoryWasCleared.send(player, sender);
+			if(renderedSenderMessage != null)
+			{
+				new Message(renderedSenderMessage, senderMessageMethod).send(player);
+			}
+			else
+			{
+				messageInventoryWasCleared.send(player, sender);
+			}
+
 			if(sender instanceof Player)
 			{
 				Player senderPlayer = (Player) sender;
-				Minepacks.getScheduler().runAtEntity(senderPlayer, task -> messageOtherInventoryCleared.send(senderPlayer, player));
+				if(Minepacks.isFoliaServer())
+				{
+					// Resolve the target placeholder on the target region, then carry only immutable
+					// rendered text to the command sender's region.
+					final String renderedTargetMessage = messageOtherInventoryCleared.prepareMessage(true, player);
+					final SendMethod targetMessageMethod = messageOtherInventoryCleared.getSendMethod();
+					Minepacks.getScheduler().runAtEntity(senderPlayer, task -> {
+						if(senderPlayer.isOnline()) new Message(renderedTargetMessage, targetMessageMethod).send(senderPlayer);
+					});
+				}
+				else
+				{
+					Minepacks.getScheduler().runAtEntity(senderPlayer, task -> messageOtherInventoryCleared.send(senderPlayer, player));
+				}
 			}
 			else
 			{
@@ -127,7 +160,7 @@ public class InventoryClearCommand implements CommandExecutor, TabCompleter
 			}
 			else
 			{
-				sender.sendMessage("/clear <player_name>"); //TODO
+				sender.sendMessage("/clear <player_name>");
 			}
 		}
 		else
