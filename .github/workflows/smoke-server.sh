@@ -34,6 +34,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
+print_diagnostic() {
+  local headline="$1"
+  local reason
+  reason="$(grep -E -i 'Minepacks|ERROR|Exception|Caused by|Could not load|failed|unsupported' "$LOG" 2>/dev/null | tail -n 1 || true)"
+  if [ -z "$reason" ]; then reason="$headline"; fi
+  reason="${reason//'%'/'%25'}"
+  reason="${reason//$'\r'/'%0D'}"
+  reason="${reason//$'\n'/'%0A'}"
+  echo "::error title=Minepacks server smoke::${reason}" >&2
+  echo "$headline" >&2
+  echo '----- relevant server log -----' >&2
+  grep -E -i 'Minepacks|ERROR|WARN|Exception|Caused by|Could not load|failed|unsupported|Done \(' "$LOG" 2>/dev/null | tail -n 100 >&2 || true
+  echo '----- server log tail -----' >&2
+  tail -n 60 "$LOG" >&2 || true
+}
+
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR/plugins"
 cp "$SERVER_JAR" "$WORKDIR/server.jar"
@@ -80,23 +96,17 @@ for _ in $(seq 1 180); do
 done
 
 if [ "$READY" -ne 1 ]; then
-  echo 'Server did not reach the ready state.' >&2
-  echo '----- server.log -----' >&2
-  cat "$LOG" >&2 || true
+  print_diagnostic 'Server did not reach the ready state.'
   exit 1
 fi
 
 if ! grep -Fq "$EXPECTED_LOG" "$LOG"; then
-  echo "Minepacks did not emit the expected compatibility message: $EXPECTED_LOG" >&2
-  echo '----- server.log -----' >&2
-  cat "$LOG" >&2 || true
+  print_diagnostic "Minepacks did not emit the expected compatibility message: $EXPECTED_LOG"
   exit 1
 fi
 
 if grep -Eq 'Error occurred while enabling Minepacks|Could not load .*Minepacks|Minepacks refused to initialize backpack storage' "$LOG"; then
-  echo 'Minepacks reported a startup failure.' >&2
-  echo '----- server.log -----' >&2
-  cat "$LOG" >&2 || true
+  print_diagnostic 'Minepacks reported a startup failure.'
   exit 1
 fi
 
@@ -115,9 +125,7 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$STOPPED" -ne 1 ]; then
-  echo 'Server did not stop cleanly after the stop command.' >&2
-  echo '----- server.log -----' >&2
-  cat "$LOG" >&2 || true
+  print_diagnostic 'Server did not stop cleanly after the stop command.'
   exit 1
 fi
 
