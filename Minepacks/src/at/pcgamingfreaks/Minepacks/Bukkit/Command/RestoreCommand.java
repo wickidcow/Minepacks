@@ -95,39 +95,69 @@ public class RestoreCommand extends MinepacksCommand
 		}
 	}
 
+	private void sendToSender(@NotNull CommandSender sender, @NotNull Runnable message)
+	{
+		if(Minepacks.isFoliaServer() && sender instanceof Player)
+		{
+			Minepacks.getScheduler().runAtEntity((Player) sender, task -> message.run());
+		}
+		else
+		{
+			message.run();
+		}
+	}
+
 	@SuppressWarnings("deprecation")
 	private void restore(final @NotNull CommandSender sender, final @NotNull String[] args)
 	{
-		ItemStack[] items = ((Minepacks) getMinepacksPlugin()).getDatabase().loadBackup(args[0]);
-		if(items != null)
+		OfflinePlayer target = null;
+		if(args.length == 2)
 		{
-			OfflinePlayer target = null;
-			if(args.length == 2)
+			target = plugin.getServer().getOfflinePlayer(args[1]);
+		}
+		else
+		{
+			String[] components = args[0].split("_");
+			if(components.length == 2)
 			{
-				target = plugin.getServer().getOfflinePlayer(args[1]);
+				target = plugin.getServer().getOfflinePlayer(components[0]);
 			}
-			else
+			else if(components.length == 3)
 			{
-				String[] components = args[0].split("_");
-				if(components.length == 2)
+				if(!components[1].contains("-"))
 				{
-					target = plugin.getServer().getOfflinePlayer(components[0]);
+					components[1] = components[1].replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
 				}
-				else if(components.length == 3)
+				try
 				{
-					if(!components[1].contains("-"))
-					{
-						components[1] = components[1].replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
-					}
 					target = plugin.getServer().getOfflinePlayer(UUID.fromString(components[1]));
 				}
+				catch(IllegalArgumentException ignored) {}
 			}
-			if(target == null)
+		}
+		if(target == null)
+		{
+			messageNoUserFound.send(sender);
+			return;
+		}
+
+		final OfflinePlayer restoreTarget = target;
+		final String backupId = args[0];
+		Minepacks.getScheduler().runAsync(task -> {
+			final ItemStack[] items = ((Minepacks) getMinepacksPlugin()).getDatabase().loadBackup(backupId);
+			if(items == null)
 			{
-				messageNoUserFound.send(sender);
+				sendToSender(sender, () -> messageUnableToLoadBackup.send(sender, backupId));
 				return;
 			}
-			getMinepacksPlugin().getBackpack(target, backpack -> {
+
+			getMinepacksPlugin().getBackpack(restoreTarget, backpack -> {
+				// Database callbacks for online owners are dispatched on the owner entity scheduler.
+				if(Minepacks.isFoliaServer() && backpack.isOpen())
+				{
+					Player owner = backpack.getOwnerPlayer();
+					if(owner != null) owner.closeInventory();
+				}
 				if (backpack.getSize() != items.length)
 				{
 					backpack.clear();
@@ -135,13 +165,10 @@ public class RestoreCommand extends MinepacksCommand
 				}
 				backpack.getInventory().setContents(items);
 				backpack.setChanged();
-				messageRestored.send(sender);
+				backpack.save();
+				sendToSender(sender, () -> messageRestored.send(sender));
 			});
-		}
-		else
-		{
-			messageUnableToLoadBackup.send(sender, args[0]);
-		}
+		});
 	}
 
 	private int parsePageNr(final @NotNull CommandSender sender, final @NotNull String[] args)
@@ -166,6 +193,15 @@ public class RestoreCommand extends MinepacksCommand
 		return uuidString.replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
 	}
 
+	private String formatDate(long timestamp)
+	{
+		if(dateFormat == null) return "Unknown";
+		synchronized(dateFormat)
+		{
+			return dateFormat.format(new Date(timestamp));
+		}
+	}
+
 	private void listBackups(final @NotNull CommandSender sender, final @NotNull String mainCommandAlias, final @NotNull String alias, final @NotNull String[] args)
 	{
 		int page = parsePageNr(sender, args);
@@ -185,7 +221,7 @@ public class RestoreCommand extends MinepacksCommand
 			{
 				try
 				{
-					date = dateFormat.format(new Date(Long.parseLong(components[components.length - 1])));
+					date = formatDate(Long.parseLong(components[components.length - 1]));
 				}
 				catch(NumberFormatException ignored) {}
 			}
