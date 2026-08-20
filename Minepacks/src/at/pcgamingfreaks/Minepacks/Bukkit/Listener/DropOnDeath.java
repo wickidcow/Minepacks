@@ -47,11 +47,21 @@ public class DropOnDeath extends MinepacksListener
 		{
 			final Location location = player.getLocation();
 			plugin.getBackpack(player, backpack -> {
+				// For an online owner, database callbacks are delivered on the player's entity
+				// scheduler on Folia, so custom event listeners see the expected player context.
 				BackpackDropOnDeathEvent event1 = new BackpackDropOnDeathEvent(player, backpack);
 				plugin.getServer().getPluginManager().callEvent(event1);
 				if(!event1.isCancelled())
 				{
-					backpack.drop(location);
+					if(Minepacks.isFoliaServer())
+					{
+						// World item spawning belongs to the region that owns the captured death location.
+						Minepacks.getScheduler().runAtLocation(location, () -> backpack.drop(location));
+					}
+					else
+					{
+						backpack.drop(location);
+					}
 				}
 			});
 		}
