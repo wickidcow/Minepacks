@@ -49,6 +49,18 @@ public class ClearCommand extends MinepacksCommand
 		messageClearedOther = plugin.getLanguage().getMessage("Ingame.Clean.BackpackCleanedOther").placeholders(Placeholders.PLAYER_NAME);
 	}
 
+	private void sendToSender(@NotNull CommandSender sender, @NotNull Runnable message)
+	{
+		if(Minepacks.isFoliaServer() && sender instanceof Player)
+		{
+			Minepacks.getScheduler().runAtEntity((Player) sender, task -> message.run());
+		}
+		else
+		{
+			message.run();
+		}
+	}
+
 	@Override
 	public void execute(final @NotNull CommandSender commandSender, @NotNull String mainCommandAlias, @NotNull String alias, @NotNull String[] args)
 	{
@@ -71,32 +83,33 @@ public class ClearCommand extends MinepacksCommand
 						backpack.clear();
 						if(commandSender instanceof Player && ((Player) commandSender).getUniqueId().equals(backpack.getOwnerId()))
 						{
-							messageCleared.send(commandSender);
+							sendToSender(commandSender, () -> messageCleared.send(commandSender));
 						}
 						else
 						{
 							Player owner = backpack.getOwnerPlayer();
 							if(owner != null)
 							{
-								messageClearedOther.send(commandSender, owner);
+								sendToSender(commandSender, () -> messageClearedOther.send(commandSender, owner));
 								messageClearedBy.send(owner, commandSender);
 							}
 							else
 							{
-								messageClearedOther.send(commandSender, backpack.getOwner());
+								OfflinePlayer offlineOwner = backpack.getOwner();
+								sendToSender(commandSender, () -> messageClearedOther.send(commandSender, offlineOwner));
 							}
 						}
 					}
 					else
 					{
-						((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender);
+						sendToSender(commandSender, () -> ((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender));
 					}
 				}
 
 				@Override
 				public void onFail()
 				{
-					((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender);
+					sendToSender(commandSender, () -> ((Minepacks) getMinepacksPlugin()).messageInvalidBackpack.send(commandSender));
 				}
 			});
 		}
