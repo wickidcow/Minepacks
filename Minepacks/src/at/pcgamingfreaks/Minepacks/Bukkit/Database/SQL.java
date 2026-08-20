@@ -209,8 +209,9 @@ public abstract class SQL extends Database
 
 	private void markBackpackDirtyForRetry(final Backpack backpack)
 	{
-		if(asyncSave) Minepacks.getScheduler().runNextTick(task -> backpack.setChanged());
-		else backpack.setChanged();
+		// Backpack dirty state is atomic; setting it directly keeps failures retryable even if
+		// the scheduler is already shutting down.
+		backpack.setChanged();
 	}
 
 	@Override
@@ -246,8 +247,9 @@ public abstract class SQL extends Database
 								{
 									final int newID = rs.getInt(fieldPlayerID);
 									DBTools.runStatement(connection, queryInsertBp, newID, data, usedSerializer);
-									if(asyncSave) Minepacks.getScheduler().runNextTick(task -> backpack.setOwnerDatabaseId(newID));
-									else backpack.setOwnerDatabaseId(newID);
+									// ownerDatabaseId is volatile, so publishing the database row id does not require
+									// a scheduler handoff and becomes visible to the next save immediately.
+									backpack.setOwnerDatabaseId(newID);
 								}
 								else
 								{
