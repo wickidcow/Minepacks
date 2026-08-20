@@ -64,6 +64,7 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 {
@@ -117,6 +118,21 @@ public class Minepacks extends JavaPlugin implements MinepacksPlugin, IPlugin
 
 	@Override
 	public void onEnable()
+	{
+		try
+		{
+			enableMinepacks();
+		}
+		catch(Throwable throwable)
+		{
+			getLogger().log(Level.SEVERE, "Minepacks failed during startup. The full cause is logged before the loader handles the failure.", throwable);
+			if(throwable instanceof Error) throw (Error) throwable;
+			if(throwable instanceof RuntimeException) throw (RuntimeException) throwable;
+			throw new RuntimeException(throwable);
+		}
+	}
+
+	private void enableMinepacks()
 	{
 		checkOldDataFolder();
 
