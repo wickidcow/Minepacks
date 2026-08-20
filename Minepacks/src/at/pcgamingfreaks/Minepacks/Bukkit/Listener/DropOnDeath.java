@@ -55,8 +55,8 @@ public class DropOnDeath extends MinepacksListener
 				{
 					if(Minepacks.isFoliaServer())
 					{
-						// World item spawning belongs to the region that owns the captured death location.
-						Minepacks.getScheduler().runAtLocation(location, () -> backpack.drop(location));
+						// FoliaLib 0.5.1 passes the wrapped task into location callbacks.
+						Minepacks.getScheduler().runAtLocation(location, task -> backpack.drop(location));
 					}
 					else
 					{
