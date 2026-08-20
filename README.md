@@ -27,7 +27,7 @@
 [reportBug]: https://github.com/GeorgH93/Minepacks/issues/new?labels=bug&template=bug.md
 [featureRequests]: https://github.com/GeorgH93/Minepacks/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement
 [featureRequestsImg]: https://img.shields.io/github/issues/GeorgH93/Minepacks/enhancement.svg?label=feature%20requests&color=informational
-[requestFeature]: https://github.com/GeorgH93/Minepacks/issues/new?labels=enhancement&template=feature.md
+[requestFeature]: https://github.com/GeorgH93/Minepacks/issues/new?labels=enhancement&template=enhancement.md
 [config]: https://github.com/GeorgH93/Minepacks/blob/master/Minepacks/resources/config.yml
 [pcgfPluginLib]: https://github.com/GeorgH93/PCGF_PluginLib
 [pcgfPluginLibAdvantages]: https://github.com/GeorgH93/Minepacks/wiki/Build-and-Mode-comparison#Advantages-of-using-the-PCGF-PluginLib
@@ -36,7 +36,7 @@
 
 [![Logo][banner]][spigot]
 
-Minepacks is a free and reliable backpack plugin for Minecraft servers running Bukkit, Spigot, or Paper.
+Minepacks is a free and reliable backpack plugin for Minecraft servers running Bukkit, Spigot, Paper, Purpur, or Folia.
 
 [![ciImg]][ci] [![releaseImg]][release]
 [![apiVersionImg]][api] [![licenseImg]][license] [![spigotRatingImg]][spigot]
@@ -44,15 +44,19 @@ Minepacks is a free and reliable backpack plugin for Minecraft servers running B
 [![featureRequestsImg]][featureRequests] [![bugReportsImg]][bugReports]
 [![spigotDownloadsImg]][spigot] [![bukkitDownloadsImg]][bukkit]
 
-## Paper compatibility in this fork
+## Paper, Purpur, and Folia compatibility in this fork
 
-This fork keeps the original Minepacks feature set and broad Bukkit/Spigot compatibility while making Paper use the stable Bukkit plugin-loading and inventory APIs.
+This fork preserves Minepacks' Bukkit/Spigot compatibility while using stable public APIs and scheduler ownership rules for modern Paper-family servers.
 
-* Paper no longer uses the experimental `paper-plugin.yml` / `PluginBootstrap` path.
-* Backpack inventory opening on Paper avoids version-specific menu/NMS title rewriting.
-* The Minecraft upper-version safety gate remains in place to protect stored backpack data until each new server version is validated.
-* Folia is not currently advertised as supported. Region-thread compatibility should be validated separately before enabling that declaration again.
-* Per-viewer custom backpack-title rewriting is intentionally not used on Paper; the normal backpack inventory title is used instead.
+* Paper and Purpur use the standard `plugin.yml` loader; the experimental `paper-plugin.yml` / `PluginBootstrap` path has been removed.
+* Paper, Purpur, and Folia use Bukkit's public inventory-opening API instead of version-specific menu/NMS title rewriting.
+* The Minecraft upper-version safety gate remains in place so stored backpack data is not rewritten on an unvalidated future server version.
+* Folia player work is routed through entity schedulers and location-owned world work through region schedulers.
+* Folia intentionally disables live viewing/editing of another player's backpack because one live Bukkit `Inventory` must not be shared across independently ticking player regions.
+* Folia intentionally disables Minepacks live reload and live database migration. Restart the server to reload Minepacks, and perform storage migration from a maintenance/non-Folia instance or offline workflow.
+* Full-inventory auto-pickup pauses while the owner's backpack GUI is open on Folia to avoid concurrent mutation of the live inventory.
+* Per-viewer custom backpack-title rewriting is not used on Paper-family servers; the normal backpack inventory title is used instead.
+* Plugins using the Minepacks API on Folia must access a live backpack `Inventory` from the backpack owner's entity thread. The API does not hide unsafe cross-region access by blocking between regions.
 
 ## Features:
 * [Configuration][config]
@@ -68,13 +72,13 @@ This fork keeps the original Minepacks feature set and broad Bukkit/Spigot compa
 
 ## Requirements:
 ### Runtime requirements:
-* Java 8
-* Bukkit, Spigot or Paper for Minecraft 1.8 or newer ![versionsImg]
+* Use the Java version required by your Minecraft server. The project keeps Java 8 source compatibility for legacy Bukkit/Spigot while modern 26.2 release packaging is validated on Java 25.
+* Bukkit or Spigot for legacy supported Minecraft versions, or Paper/Purpur/Folia through the explicitly validated modern version range ![versionsImg]
 * (Optional) [PCGF PluginLib][pcgfPluginLib] ([Advantages of using the PCGF PluginLib][pcgfPluginLibAdvantages])
 
 ### Build requirements:
 
-* JDK for Java 8
+* JDK for the target build/runtime
 * Maven 3
 * git
 
