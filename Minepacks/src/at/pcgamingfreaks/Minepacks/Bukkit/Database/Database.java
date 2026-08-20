@@ -257,8 +257,14 @@ public abstract class Database implements Listener
 			if(onlineOwner != null)
 			{
 				Minepacks.getScheduler().runAtEntity(onlineOwner, task -> callback.run());
-				return;
 			}
+			else
+			{
+				// Offline backpacks have no entity scheduler. Use Folia's global scheduler for
+				// plugin/global work rather than inheriting an arbitrary async completion thread.
+				Minepacks.getScheduler().runNextTick(task -> callback.run());
+			}
+			return;
 		}
 		callback.run();
 	}
