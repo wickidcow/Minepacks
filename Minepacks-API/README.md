@@ -1,13 +1,13 @@
 <!-- Variables (this block will not be visible in the readme -->
 [banner]: https://pcgamingfreaks.at/images/minepacks.png
 [spigot]: https://www.spigotmc.org/resources/minepacks.19286/
-[license]: https://github.com/GeorgH93/Minepacks/blob/master/LICENSE
-[licenseImg]: https://img.shields.io/github/license/GeorgH93/Minepacks.svg
-[ci]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/
-[ciImg]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/badge/icon
+[license]: https://github.com/wickidcow/Minepacks/blob/master/LICENSE
+[licenseImg]: https://img.shields.io/github/license/wickidcow/Minepacks.svg
+[ci]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml
+[ciImg]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml/badge.svg
 [apiVersionImg]: https://img.shields.io/badge/dynamic/xml.svg?label=api-version&query=%2F%2Frelease[1]&url=https%3A%2F%2Frepo.pcgamingfreaks.at%2Frepository%2Fmaven-releases%2Fat%2Fpcgamingfreaks%2FMinepacks-API%2Fmaven-metadata.xml
 [apiJavaDoc]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/javadoc/
-[apiBuilds]: https://ci.pcgamingfreaks.at/job/Minepacks%20API/
+[apiBuilds]: https://github.com/wickidcow/Minepacks/actions/workflows/maven.yml
 <!-- End of variables block -->
 
 [![Logo][banner]][spigot]
@@ -38,7 +38,7 @@ The API is available through maven.
 
 ### Build from source:
 ```
-git clone https://github.com/GeorgH93/Minepacks.git
+git clone https://github.com/wickidcow/Minepacks.git
 cd Minepacks
 mvn -pl Minepacks-API
 ```
@@ -77,9 +77,11 @@ When running on Folia:
 * Do not pass one live backpack inventory between players in different regions.
 * Prefer Minepacks API methods such as `openBackpack(...)` for GUI opening so Minepacks can perform the appropriate entity-scheduler handoff.
 * Treat callbacks involving an online backpack owner as owner-context work. If your plugin needs to continue on another player's region, explicitly hand off to that player's entity scheduler.
+* Minepacks inventory-clear events run in the target player's owning region. If `getSender()` is a different online `Player`, do not dereference or mutate that sender from the event callback; schedule any sender work on that sender's entity scheduler first.
+* Treat any Minepacks event exposing two different live players the same way: the callback's current region does not grant ownership of the other player's Bukkit state.
 
 Paper, Purpur, Bukkit, and Spigot keep their normal API behavior; these restrictions are specifically about Folia's region ownership model.
 
 ## Links:
 * [JavaDoc][apiJavaDoc]
-* [API Build Server][apiBuilds]
+* [API Build Workflow][apiBuilds]
