@@ -26,6 +26,8 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.logging.Level;
+
 /**
  * Uses BadRabbit to initiate the plugin in normal or standalone mode depending on the users' environment.
  */
@@ -35,33 +37,44 @@ public class MinepacksBadRabbit extends BadRabbit
 	@Override
 	protected @NotNull JavaPlugin createInstance() throws Exception
 	{
-		Plugin pcgfPluginLib = Bukkit.getPluginManager().getPlugin("PCGF_PluginLib");
-		boolean standalone = true;
-		if(pcgfPluginLib != null)
+		try
 		{
-			if(new Version(pcgfPluginLib.getDescription().getVersion()).olderThan(new Version(MagicValues.MIN_PCGF_PLUGIN_LIB_VERSION)))
+			Plugin pcgfPluginLib = Bukkit.getPluginManager().getPlugin("PCGF_PluginLib");
+			boolean standalone = true;
+			if(pcgfPluginLib != null)
 			{
-				getLogger().info("PCGF-PluginLib to old! Switching to standalone mode!");
+				if(new Version(pcgfPluginLib.getDescription().getVersion()).olderThan(new Version(MagicValues.MIN_PCGF_PLUGIN_LIB_VERSION)))
+				{
+					getLogger().info("PCGF-PluginLib too old! Switching to standalone mode!");
+				}
+				else
+				{
+					getLogger().info("PCGF-PluginLib installed. Switching to normal mode!");
+					standalone = false;
+				}
 			}
 			else
 			{
-				getLogger().info("PCGF-PluginLib installed. Switching to normal mode!");
-				standalone = false;
+				getLogger().info("PCGF-PluginLib not installed. Switching to standalone mode!");
 			}
+
+			final String implementationClass = standalone
+					? "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"
+					: "at.pcgamingfreaks.Minepacks.Bukkit.Minepacks";
+			Class<?> implementation = Class.forName(implementationClass);
+			JavaPlugin instance = (JavaPlugin) implementation.getDeclaredConstructor().newInstance();
+			getLogger().info("BadRabbit selected Minepacks implementation: " + implementationClass);
+			return instance;
 		}
-		else
+		catch(Exception e)
 		{
-			getLogger().info("PCGF-PluginLib not installed. Switching to standalone mode!");
+			getLogger().log(Level.SEVERE, "BadRabbit failed while selecting or constructing the Minepacks implementation.", e);
+			throw e;
 		}
-		if(standalone)
+		catch(LinkageError e)
 		{
-			Class<?> standaloneClass = Class.forName("at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks");
-			return (JavaPlugin) standaloneClass.newInstance();
-		}
-		else
-		{
-			Class<?> normalClass = Class.forName("at.pcgamingfreaks.Minepacks.Bukkit.Minepacks");
-			return (JavaPlugin) normalClass.newInstance();
+			getLogger().log(Level.SEVERE, "BadRabbit hit a linkage error while loading the Minepacks implementation.", e);
+			throw e;
 		}
 	}
 }
