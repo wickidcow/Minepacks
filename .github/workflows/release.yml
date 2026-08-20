@@ -1,4 +1,4 @@
-# Builds Minepacks release variants and attaches the JARs directly to a newly created GitHub release.
+# Builds the self-contained Minepacks production JAR and attaches it directly to a GitHub release.
 
 name: Build and release
 
@@ -23,25 +23,28 @@ jobs:
           java-version: '25'
           distribution: temurin
 
-      - name: Set up workspace
-        run: mkdir -p artifacts
+      - name: Build self-contained production package
+        run: mvn -B -s .github/workflows/settings.xml clean package --file pom.xml -P Standalone
 
-      - name: Build normal package
+      - name: Prepare production JAR
+        shell: bash
         run: |
-          mvn -B -s .github/workflows/settings.xml install --file pom.xml
-          cp Minepacks/target/M*.jar artifacts/
+          set -euo pipefail
+          mkdir -p artifacts
+          JAR="$(find Minepacks/target -maxdepth 1 -type f -name '*-Standalone.jar' -print -quit)"
+          test -n "$JAR"
+          NAME="$(basename "$JAR")"
+          NAME="${NAME%-Standalone.jar}.jar"
+          cp "$JAR" "artifacts/$NAME"
+          unzip -p "artifacts/$NAME" plugin.yml | grep -q '^folia-supported: true$'
+          unzip -p "artifacts/$NAME" plugin.yml | grep -q '^main: "at.pcgamingfreaks.MinepacksStandalone.Bukkit.Minepacks"$'
+          if unzip -l "artifacts/$NAME" | grep -q 'MinepacksBadRabbit.class'; then
+            echo 'BadRabbit must not be present in the production JAR.' >&2
+            exit 1
+          fi
+          echo "Production asset: $NAME"
 
-      - name: Build standalone package
-        run: |
-          mvn -B -s .github/workflows/settings.xml clean install --file pom.xml -P Standalone,ExcludeBadRabbit
-          cp Minepacks/target/M*-Standalone.jar artifacts/
-
-      - name: Build release package
-        run: |
-          mvn -B -s .github/workflows/settings.xml clean package --file pom.xml -P Release
-          cp Minepacks/target/M*-Release.jar artifacts/
-
-      - name: Attach JARs to GitHub release
+      - name: Attach JAR to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/M*.jar --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/Minepacks-*.jar --clobber
