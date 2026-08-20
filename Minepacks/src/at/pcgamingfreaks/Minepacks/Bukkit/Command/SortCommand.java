@@ -51,6 +51,7 @@ public class SortCommand extends MinepacksCommand
 			}
 			backpack.getInventory().setContents(compressor.getTargetStacks());
 			backpack.setChanged();
+			backpack.save();
 			messageSorted.send(player);
 		});
 	}
